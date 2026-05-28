@@ -1,0 +1,3267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warehouse Routing Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── RESET ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ── THEME ── */
+:root {
+  --bg:        #0e0f14;
+  --bg2:       #14161d;
+  --bg3:       #1c1e28;
+  --border:    #252836;
+  --text:      #f0f1f5;
+  --sub:       #6b7280;
+  --accent:    #6366f1;
+  --accent-h:  #4f46e5;
+  --accent-dim:#6366f120;
+  --c-green:   #10b981;
+  --c-green-d: #10b98120;
+  --c-red:     #ef4444;
+  --c-red-d:   #ef444420;
+  --c-blue:    #3b82f6;
+  --c-blue-d:  #3b82f620;
+  --c-amber:   #f59e0b;
+  --c-amber-d: #f59e0b20;
+  --c-purple:  #a855f7;
+  --ber-solid: #10b981;
+  --poz-solid: #ef4444;
+  --unk-solid: #f59e0b;
+  --sidebar-w: 260px;
+  --topbar-h:  58px;
+}
+body.light {
+  --bg:        #f0f2f5;
+  --bg2:       #ffffff;
+  --bg3:       #e8eaf0;
+  --border:    #d1d5db;
+  --text:      #111827;
+  --sub:       #6b7280;
+  --accent:    #4f46e5;
+  --accent-h:  #4338ca;
+  --accent-dim:#4f46e512;
+  --c-green-d: #10b98114;
+  --c-red-d:   #ef444414;
+  --c-blue-d:  #3b82f614;
+  --c-amber-d: #f59e0b14;
+}
+
+/* ── BASE ── */
+html, body { height: 100%; }
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  transition: background .25s, color .25s;
+}
+
+/* ════════════════════════════════════════
+   LAYOUT — sidebar + main
+════════════════════════════════════════ */
+.dash-shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  grid-template-rows: var(--topbar-h) 1fr;
+  height: 100vh;
+}
+
+/* ── TOP BAR ── */
+.topbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  z-index: 100;
+}
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+.topbar-logo {
+  width: 28px; height: 28px;
+  background: var(--accent);
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px;
+}
+.topbar-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.3px;
+}
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+}
+.tb-btn {
+  padding: .35rem .85rem;
+  border-radius: 7px;
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  color: var(--text);
+  transition: background .15s;
+}
+.tb-btn:hover { background: var(--border); }
+.tb-btn.accent { background: var(--accent); color: #fff; border-color: var(--accent); }
+.tb-btn.accent:hover { background: var(--accent-h); }
+.tb-status {
+  font-size: 11px;
+  color: var(--sub);
+  padding: .3rem .75rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#modelDot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--sub);
+  display: inline-block;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+#modelDot.ready { background: var(--c-green); box-shadow: 0 0 6px var(--c-green); }
+
+/* ── SIDEBAR ── */
+.sidebar {
+  grid-column: 1;
+  grid-row: 2;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  padding: 1rem 0 1rem;
+}
+.sidebar-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--sub);
+  padding: .9rem 1.25rem .35rem;
+}
+/* Model state panel */
+.model-state-panel {
+  margin: .25rem .75rem .5rem;
+  padding: .85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg3);
+}
+.model-state-panel.ready {
+  background: var(--c-green-d);
+  border-color: var(--c-green);
+}
+
+.state-heading {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: .4rem;
+}
+.state-sub {
+  font-size: 11px;
+  color: var(--sub);
+  line-height: 1.5;
+  margin-bottom: .6rem;
+}
+.file-btn-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  padding: .55rem .9rem;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s;
+  width: 100%;
+  text-align: center;
+}
+.file-btn-label:hover { background: var(--accent-h); }
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.ready-info {
+  font-size: 11px;
+  color: var(--c-green);
+  font-weight: 600;
+  margin-bottom: .2rem;
+}
+#modelStatusReady {
+  font-size: 10px;
+  color: var(--sub);
+  line-height: 1.4;
+}
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--sub);
+  border-radius: 7px;
+  font-size: 13px;
+  padding: .3rem .55rem;
+  cursor: pointer;
+}
+.icon-btn:hover { background: var(--bg); color: var(--text); }
+
+/* Retrain panel */
+.retrain-panel {
+  margin: .25rem .75rem .5rem;
+  padding: .85rem 1rem;
+  border-radius: 10px;
+  border: 1px dashed var(--c-amber);
+  background: var(--c-amber-d);
+}
+.retrain-heading {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--c-amber);
+  margin-bottom: .35rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Training progress in sidebar */
+#trainingProgressContainer {
+  margin: 0 .75rem .5rem;
+  display: none;
+}
+#trainingProgressLabel {
+  font-size: 11px;
+  color: var(--sub);
+  margin-bottom: 4px;
+}
+.progress-track {
+  background: var(--bg);
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+#trainingProgressBar {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: #fff;
+  transition: width .25s ease;
+  min-width: 20px;
+}
+
+/* Sidebar stats */
+.sidebar-stats {
+  padding: .25rem .75rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .4rem;
+}
+.stat-tile {
+  background: var(--bg3);
+  border-radius: 8px;
+  padding: .6rem .75rem;
+  border: 1px solid var(--border);
+}
+.stat-tile-label { font-size: 10px; color: var(--sub); margin-bottom: 2px; }
+.stat-tile-value { font-size: 20px; font-weight: 700; color: var(--text); line-height: 1; }
+.stat-tile.ber .stat-tile-value { color: var(--c-green); }
+.stat-tile.poz .stat-tile-value { color: var(--c-red); }
+.stat-tile.total .stat-tile-value { color: var(--accent); }
+
+/* Warehouse bars in sidebar */
+.wh-bars { padding: .25rem .75rem; }
+.wh-bar-row { display: flex; align-items: center; gap: .5rem; margin: .25rem 0; }
+.wh-bar-label { font-size: 10px; color: var(--sub); width: 50px; flex-shrink: 0; }
+.wh-bar-track { flex: 1; height: 12px; background: var(--bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+.wh-bar-fill { height: 100%; border-radius: 999px; transition: width .3s ease; }
+.wh-bar-fill.ber { background: var(--c-green); }
+.wh-bar-fill.poz { background: var(--c-red); }
+.wh-bar-fill.other { background: var(--accent); }
+.wh-bar-count { font-size: 10px; color: var(--sub); width: 24px; text-align: right; flex-shrink: 0; }
+
+/* ── MAIN CONTENT ── */
+.main {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* Lookup bar */
+.lookup-bar {
+  padding: 1rem 1.5rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: .75rem;
+  align-items: center;
+}
+.lookup-bar-inner {
+  flex: 1;
+  position: relative;
+  max-width: 560px;
+}
+.lookup-bar-icon {
+  position: absolute;
+  left: .9rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 15px;
+  pointer-events: none;
+}
+#returnIdInput {
+  width: 100%;
+  padding: .7rem 1rem .7rem 2.6rem;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 15px;
+  letter-spacing: .03em;
+  transition: border .15s, box-shadow .15s;
+}
+#returnIdInput:focus {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+#returnIdInput:disabled { opacity: .4; }
+#lookupBtn {
+  padding: .7rem 1.4rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Syne', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .15s, opacity .15s;
+  white-space: nowrap;
+}
+#lookupBtn:hover { background: var(--accent-h); }
+#lookupBtn:disabled { opacity: .4; cursor: default; }
+
+/* ── MAIN GRID ── */
+.main-grid {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  grid-template-rows: auto auto auto;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  overflow-y: auto;
+  align-content: start;
+}
+
+/* ── RESULT PANEL ── */
+.result-panel {
+  grid-column: 1;
+  grid-row: 1;
+  background: var(--bg2);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  padding: 1.5rem;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.result-panel.has-result {
+  display: block;
+}
+.result-empty {
+  text-align: center;
+  color: var(--sub);
+  font-size: 13px;
+}
+.result-empty-icon { font-size: 32px; margin-bottom: .5rem; }
+
+/* Result content */
+.result-wh-row {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1rem;
+}
+.result-wh-badge {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -.5px;
+  padding: .4rem 1.2rem;
+  border-radius: 12px;
+  line-height: 1.1;
+}
+.result-wh-badge.ber  { background: var(--c-green-d); color: var(--c-green); border: 2px solid var(--c-green); }
+.result-wh-badge.poz  { background: var(--c-red-d);   color: var(--c-red);   border: 2px solid var(--c-red); }
+.result-wh-badge.unk  { background: var(--c-amber-d); color: var(--c-amber); border: 2px solid var(--c-amber); }
+.result-wh-badge.other { background: var(--c-blue-d); color: var(--c-blue);  border: 2px solid var(--c-blue); }
+
+.result-meta { flex: 1; }
+.result-meta-label { font-size: 11px; color: var(--sub); text-transform: uppercase; letter-spacing: .07em; margin-bottom: .2rem; }
+.result-resolved { font-size: 12px; color: var(--sub); margin-top: .15rem; }
+.result-resolved span { color: var(--text); font-weight: 500; }
+
+.conf-row { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; }
+.conf-badge { padding: .2rem .65rem; border-radius: 999px; font-size: 11px; font-weight: 700; color: #fff; }
+.conf-high    { background: var(--c-green); }
+.conf-mid     { background: var(--c-blue); }
+.conf-low     { background: var(--c-amber); color: #111; }
+.conf-verylow { background: var(--c-red); }
+.conf-track   { flex: 1; height: 10px; background: var(--bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+.conf-fill    { height: 100%; border-radius: 999px; background: var(--accent); transition: width .35s ease; }
+.conf-pct     { font-size: 13px; font-weight: 600; color: var(--sub); min-width: 36px; text-align: right; }
+
+.layer-row { display: flex; justify-content: space-between; align-items: center; font-size: 11px; padding: .2rem 0; border-bottom: 1px solid var(--border); }
+.layer-row:last-child { border-bottom: none; }
+.layer-name { color: var(--sub); }
+.layer-pred { font-weight: 500; color: var(--text); }
+.layer-conf { color: var(--sub); font-size: 10px; }
+.result-error { color: var(--c-red); font-size: 13px; }
+
+/* ── MERCHANT PANEL ── */
+.merchant-panel {
+  grid-column: 1;
+  grid-row: 2;
+  background: var(--bg2);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.panel-header {
+  padding: .9rem 1rem .7rem;
+  border-bottom: 1px solid var(--border);
+  font-family: 'Syne', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--sub);
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+.merchant-list { overflow-y: auto; flex: 1; }
+.merchant-row {
+  display: grid;
+  grid-template-columns: 1fr 40px 40px;
+  gap: .5rem;
+  padding: .45rem .85rem;
+  font-size: 11px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+}
+.merchant-row:last-child { border-bottom: none; }
+.merchant-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.merchant-count { text-align: right; color: var(--sub); }
+.merchant-pct   { text-align: right; font-weight: 600; color: var(--text); }
+.merchant-empty { padding: 1rem; font-size: 12px; color: var(--sub); text-align: center; }
+
+/* ── RECENT SCANS ── */
+.recent-panel {
+  grid-column: 1;
+  grid-row: 3;
+  background: var(--bg2);
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 200px;
+}
+.scan-table-wrap { overflow-y: auto; flex: 1; }
+.scan-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.scan-table th {
+  text-align: left;
+  padding: .5rem .85rem;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--sub);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  z-index: 1;
+}
+.scan-table td {
+  padding: .45rem .85rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  vertical-align: middle;
+}
+.scan-table tr:last-child td { border-bottom: none; }
+.scan-table tr:hover td { background: var(--bg3); }
+.wh-chip {
+  display: inline-block;
+  padding: .15rem .55rem;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.wh-chip.ber   { background: var(--c-green-d); color: var(--c-green); }
+.wh-chip.poz   { background: var(--c-red-d);   color: var(--c-red); }
+.wh-chip.unk   { background: var(--c-amber-d); color: var(--c-amber); }
+.wh-chip.other { background: var(--c-blue-d);  color: var(--c-blue); }
+.conf-mini { font-size: 10px; color: var(--sub); }
+.scan-empty { padding: 1.5rem; font-size: 12px; color: var(--sub); text-align: center; }
+.time-ago { font-size: 10px; color: var(--sub); }
+
+/* ── MODEL STATUS ── */
+#modelStatus { display:none; }
+
+/* ════════════════════════════════════════
+   MOBILE SCANNER VIEW
+════════════════════════════════════════ */
+body.mobile .dash-shell {
+  grid-template-columns: 1fr;
+  grid-template-rows: var(--topbar-h) auto 1fr;
+  overflow: hidden;
+}
+body.mobile .sidebar { display: none; }
+body.mobile .main {
+  grid-column: 1;
+  grid-row: 2 / 4;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+body.mobile .lookup-bar {
+  flex-direction: column;
+  padding: .75rem 1rem;
+  gap: .5rem;
+}
+body.mobile .lookup-bar-inner { max-width: 100%; }
+body.mobile #returnIdInput { font-size: 20px; padding: .9rem 1rem .9rem 2.6rem; }
+body.mobile #lookupBtn { display: none; }
+body.mobile .main-grid { display: none; }
+.mobile-counter-strip {
+  display: none;
+  padding: .5rem 1rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  gap: .5rem;
+}
+body.mobile .mobile-counter-strip {
+  display: flex;
+}
+.mc-box { flex: 1; text-align: center; }
+.mc-label { font-size: 10px; color: var(--sub); }
+.mc-val   { font-size: 18px; font-weight: 700; color: var(--text); }
+.mc-box.ber .mc-val   { color: var(--c-green); }
+.mc-box.poz .mc-val   { color: var(--c-red); }
+.mc-box.total .mc-val { color: var(--accent); }
+.mobile-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--sub);
+  padding: .5rem 1rem;
+  display: none;
+}
+body.mobile .mobile-hint { display: block; }
+
+/* ── MOBILE OVERLAY ── */
+.mob-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  padding: 2.5rem 2rem;
+  background: var(--bg2);
+  opacity: 0; pointer-events: none;
+  transition: opacity .15s ease;
+}
+.mob-overlay.show { opacity: 1; pointer-events: auto; }
+.mob-overlay.ber     { background: #031a0e; }
+.mob-overlay.poz     { background: #1a0303; }
+.mob-overlay.unknown { background: #1a1400; }
+body.light .mob-overlay.ber     { background: #d1fae5; }
+body.light .mob-overlay.poz     { background: #fee2e2; }
+body.light .mob-overlay.unknown { background: #fef9c3; }
+.mob-icon     { font-size: 52px; line-height: 1; margin-bottom: .5rem; }
+.mob-to-label { font-family:'Syne',sans-serif; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.14em; color:var(--sub); margin-bottom:.35rem; }
+.mob-wh-name  { font-family:'Syne',sans-serif; font-size:clamp(40px,15vw,80px); font-weight:800; line-height:1; text-align:center; word-break:break-word; max-width:100%; }
+.mob-wh-name.ber     { color: var(--c-green); }
+.mob-wh-name.poz     { color: var(--c-red); }
+.mob-wh-name.unknown { color: var(--c-amber); }
+.mob-wh-name.other   { color: var(--c-blue); }
+.mob-conf-row { display:flex; align-items:center; gap:.75rem; margin-top:1.5rem; width:100%; max-width:300px; }
+.mob-conf-badge { padding:.25rem .75rem; border-radius:999px; font-size:12px; font-weight:700; color:#fff; white-space:nowrap; flex-shrink:0; }
+.mob-conf-track { flex:1; height:10px; background:rgba(255,255,255,.08); border-radius:999px; overflow:hidden; }
+body.light .mob-conf-track { background:rgba(0,0,0,.08); }
+.mob-conf-bar { height:100%; background:var(--accent); border-radius:999px; transition:width .4s ease; }
+.mob-conf-pct { font-size:13px; font-weight:700; color:var(--sub); min-width:38px; text-align:right; }
+.mob-timer-ring { position:absolute; bottom:2rem; width:36px; height:36px; }
+.mob-timer-ring circle { fill:none; stroke:var(--border); stroke-width:3; }
+.mob-timer-ring .sweep { stroke:var(--accent); stroke-linecap:round; stroke-dasharray:94.2; stroke-dashoffset:94.2; transform:rotate(-90deg); transform-origin:18px 18px; transition:stroke-dashoffset 2.4s linear; }
+.mob-overlay.show .mob-timer-ring .sweep { stroke-dashoffset:0; }
+
+/* ── THEME FAB ── */
+#themeFab { position:fixed; bottom:1.25rem; right:1.25rem; width:38px; height:38px; border-radius:50%; background:var(--bg2); border:1px solid var(--border); box-shadow:0 2px 10px rgba(0,0,0,.3); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:16px; z-index:2000; padding:0; transition:box-shadow .2s; }
+#themeFab:hover { box-shadow:0 4px 16px rgba(0,0,0,.4); }
+
+/* ── TWO-FILE STATUS BADGES ── */
+.file-ready-badge {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: 10px; font-weight: 600; padding: .2rem .55rem;
+  border-radius: 999px; white-space: nowrap;
+}
+.file-ready-badge.ready   { background: var(--c-green-d); color: var(--c-green); border: 1px solid var(--c-green); }
+.file-ready-badge.pending { background: var(--bg3); color: var(--sub); border: 1px solid var(--border); }
+.model-dual-status {
+  margin: .1rem .75rem .5rem;
+  display: flex; gap: .4rem; flex-wrap: wrap;
+}
+
+/* ── SEARCH DROPDOWN ── */
+.search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0; right: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0,0,0,.35);
+  z-index: 500;
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.sd-section-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--sub); padding: .55rem .9rem .3rem; background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+}
+.sd-row {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .5rem .9rem; cursor: pointer; border-bottom: 1px solid var(--border);
+  transition: background .1s;
+}
+.sd-row:last-child { border-bottom: none; }
+.sd-row:hover { background: var(--bg3); }
+.sd-row-name { flex: 1; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sd-row-name em { color: var(--accent); font-style: normal; font-weight: 700; }
+.sd-row-wh {
+  font-size: 11px; font-weight: 700; padding: .15rem .5rem;
+  border-radius: 5px; white-space: nowrap; flex-shrink: 0;
+}
+.sd-row-wh.ber  { background: var(--c-green-d); color: var(--c-green); }
+.sd-row-wh.poz  { background: var(--c-red-d);   color: var(--c-red); }
+.sd-row-wh.unk  { background: var(--c-amber-d); color: var(--c-amber); }
+.sd-row-wh.other{ background: var(--c-blue-d);  color: var(--c-blue); }
+.sd-row-count { font-size: 10px; color: var(--sub); flex-shrink: 0; min-width: 28px; text-align: right; }
+.sd-empty { padding: .75rem .9rem; font-size: 12px; color: var(--sub); }
+
+/* ── BIG WAREHOUSE HERO RESULT ── */
+.result-hero {
+  text-align: center;
+  padding: 1.5rem 1rem 1rem;
+}
+.result-hero-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--sub); margin-bottom: .6rem;
+}
+.result-hero-badge {
+  font-family: 'Syne', sans-serif;
+  font-size: clamp(52px, 8vw, 88px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1;
+  padding: .35em .6em;
+  border-radius: 18px;
+  display: inline-block;
+  margin-bottom: .6rem;
+}
+.result-hero-badge.ber  { background: var(--c-green-d); color: var(--c-green); border: 3px solid var(--c-green); }
+.result-hero-badge.poz  { background: var(--c-red-d);   color: var(--c-red);   border: 3px solid var(--c-red); }
+.result-hero-badge.unk  { background: var(--c-amber-d); color: var(--c-amber); border: 3px solid var(--c-amber); }
+.result-hero-badge.other{ background: var(--c-blue-d);  color: var(--c-blue);  border: 3px solid var(--c-blue); }
+.result-hero-meta {
+  font-size: 12px; color: var(--sub); margin-bottom: .5rem;
+}
+.result-hero-meta strong { color: var(--text); }
+.result-conf-row {
+  display: flex; align-items: center; gap: .65rem;
+  max-width: 320px; margin: 0 auto .6rem;
+}
+.result-secondary {
+  margin-top: .85rem; border-top: 1px solid var(--border); padding-top: .75rem;
+}
+.result-secondary-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--sub); margin-bottom: .5rem;
+}
+.result-secondary-row {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .35rem .5rem; border-radius: 7px; margin-bottom: .25rem;
+}
+.result-secondary-row:hover { background: var(--bg3); }
+.result-secondary-badge {
+  font-family: 'Syne', sans-serif; font-weight: 700;
+  font-size: 14px; padding: .2rem .6rem; border-radius: 7px; flex-shrink: 0; min-width: 60px; text-align: center;
+}
+.result-secondary-badge.ber  { background: var(--c-green-d); color: var(--c-green); }
+.result-secondary-badge.poz  { background: var(--c-red-d);   color: var(--c-red); }
+.result-secondary-badge.unk  { background: var(--c-amber-d); color: var(--c-amber); }
+.result-secondary-badge.other{ background: var(--c-blue-d);  color: var(--c-blue); }
+.result-secondary-bar-wrap { flex: 1; }
+.result-secondary-track { height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--border); }
+.result-secondary-fill  { height: 100%; border-radius: 999px; }
+.result-secondary-fill.ber  { background: var(--c-green); }
+.result-secondary-fill.poz  { background: var(--c-red); }
+.result-secondary-fill.unk  { background: var(--c-amber); }
+.result-secondary-fill.other{ background: var(--c-blue); }
+.result-secondary-pct { font-size: 11px; font-weight: 600; color: var(--sub); min-width: 32px; text-align: right; flex-shrink: 0; }
+.result-merchant-tag {
+  font-size: 11px; padding: .2rem .55rem; border-radius: 5px;
+  background: var(--accent-dim); color: var(--accent);
+  border: 1px solid var(--accent); display: inline-block; margin: .1rem .15rem;
+}
+
+/* scrollbar */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+
+/* ── CAMERA BUTTON (hidden — panel always visible) ── */
+#cameraBtn { display: none; }
+
+/* ══ CAMERA PANEL (inline grid panel) ══ */
+.camera-panel {
+  grid-column: 2;
+  grid-row: 1 / 4;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 120px);
+}
+.cam-panel-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .8rem 1rem .65rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cam-panel-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px; font-weight: 700;
+  color: var(--sub); text-transform: uppercase; letter-spacing: .07em;
+}
+/* Mode tabs */
+.cam-tabs { display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.cam-tab {
+  flex: 1; padding: .55rem .4rem;
+  background: none; border: none;
+  font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 600;
+  color: var(--sub); cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.cam-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.cam-tab:hover:not(.active) { color: var(--text); }
+/* Viewport */
+.cam-viewport { position: relative; background: #111; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#camVideo { width: 100%; flex: 1; min-height: 0; display: block; object-fit: cover; }
+/* Start overlay */
+.cam-start-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,.78);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: .5rem;
+  cursor: pointer; transition: background .15s;
+}
+.cam-start-overlay:hover { background: rgba(0,0,0,.6); }
+.cam-start-overlay .start-icon { font-size: 32px; }
+.cam-start-overlay .start-lbl  { font-size: 12px; color: rgba(255,255,255,.65); font-family: 'Syne', sans-serif; font-weight: 600; }
+#camStartOverlay.hidden { display: none; }
+/* Scan line */
+.scan-line {
+  position: absolute; left: 8%; right: 8%; height: 2px;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent);
+  animation: scanSwipe 2s ease-in-out infinite; display: none; pointer-events: none;
+}
+#cameraPanel.mode-barcode .scan-line { display: block; }
+@keyframes scanSwipe { 0%{top:15%} 50%{top:82%} 100%{top:15%} }
+/* Corners */
+.cam-corners { position: absolute; inset: 8%; pointer-events: none; display: none; }
+#cameraPanel.mode-barcode .cam-corners { display: block; }
+.cam-corners::before,.cam-corners::after,.cam-corners span::before,.cam-corners span::after {
+  content:''; position: absolute; width: 15px; height: 15px;
+  border-color: var(--accent); border-style: solid; box-shadow: 0 0 5px var(--accent);
+}
+.cam-corners::before{top:0;left:0;border-width:2px 0 0 2px}
+.cam-corners::after{top:0;right:0;border-width:2px 2px 0 0}
+.cam-corners span::before{bottom:0;left:0;border-width:0 0 2px 2px}
+.cam-corners span::after{bottom:0;right:0;border-width:0 2px 2px 0}
+/* OCR grid */
+.ocr-overlay {
+  position: absolute; inset: 0; pointer-events: none; display: none;
+  background: linear-gradient(rgba(99,102,241,.05) 1px,transparent 1px),
+              linear-gradient(90deg,rgba(99,102,241,.05) 1px,transparent 1px);
+  background-size: 32px 32px;
+}
+#cameraPanel.mode-label .ocr-overlay { display: block; }
+/* Controls */
+.cam-controls {
+  display: flex; gap: .45rem; padding: .5rem .7rem;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; align-items: center;
+}
+#camCaptureBtn {
+  flex: 1; padding: .45rem .7rem;
+  background: var(--accent); color: #fff; border: none; border-radius: 7px;
+  font-family: 'Syne', sans-serif; font-size: 11px; font-weight: 600;
+  cursor: pointer; transition: opacity .15s;
+}
+#camCaptureBtn:disabled { opacity: .45; cursor: default; }
+.cam-flip-btn {
+  padding: .45rem .6rem; background: var(--bg3); color: var(--text);
+  border: 1px solid var(--border); border-radius: 7px; font-size: 14px; cursor: pointer;
+}
+.cam-flip-btn:hover { background: var(--border); }
+.cam-stop-btn {
+  padding: .45rem .6rem; background: var(--bg3); color: var(--c-red);
+  border: 1px solid var(--border); border-radius: 7px;
+  font-size: 11px; font-weight: 700; font-family: 'Syne', sans-serif; cursor: pointer;
+}
+.cam-stop-btn:hover { background: var(--c-red-d); }
+/* Status */
+.cam-status {
+  padding: .45rem .75rem; font-size: 11px; color: var(--sub);
+  line-height: 1.5; min-height: 34px; flex-shrink: 0;
+}
+.cam-status.success { color: var(--c-green); }
+.cam-status.error   { color: var(--c-red); }
+.cam-status.info    { color: var(--accent); }
+/* OCR phases */
+.ocr-phase-wrap {
+  display: none; flex-direction: column; gap: .35rem;
+  padding: .45rem .7rem; border-top: 1px solid var(--border);
+  flex-shrink: 0; overflow-y: auto; max-height: 150px;
+}
+.ocr-phase-wrap.visible { display: flex; }
+.ocr-phase-label {
+  font-size: 10px; font-weight: 700; color: var(--sub);
+  text-transform: uppercase; letter-spacing: .06em;
+}
+.ocr-raw-block {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: var(--text); background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 6px; padding: .35rem .55rem; line-height: 1.5;
+  word-break: break-all; white-space: pre-wrap; max-height: 54px; overflow-y: auto;
+}
+.ocr-match-block {
+  font-size: 11px; color: var(--sub); background: var(--bg3);
+  border: 1px solid var(--border); border-radius: 6px; padding: .35rem .55rem; line-height: 1.4;
+}
+.ocr-match-block.hit  { background: var(--c-green-d); border-color: var(--c-green); color: var(--c-green); }
+.ocr-match-block.miss { background: var(--c-amber-d); border-color: var(--c-amber); color: var(--c-amber); }
+/* Switch row */
+.cam-switch-row { display: none; align-items: center; justify-content: space-between; gap: .5rem; padding: .4rem .7rem; border-top: 1px solid var(--border); flex-shrink: 0; }
+.cam-switch-row.visible { display: flex; }
+.cam-switch-hint { font-size: 10px; color: var(--sub); }
+.cam-switch-btn {
+  padding: .28rem .6rem; border-radius: 6px; background: var(--bg3);
+  border: 1px solid var(--border); font-size: 10px; font-family: 'Syne', sans-serif;
+  font-weight: 600; color: var(--text); cursor: pointer; white-space: nowrap;
+}
+.cam-switch-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+/* Spinner */
+.cam-spinner {
+  display: inline-block; width: 11px; height: 11px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle; margin-right: 4px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+#camCanvas { display: none; }
+</style>
+
+
+</head>
+
+<body class="desktop">
+
+<!-- ══ DASHBOARD SHELL ══ -->
+<div class="dash-shell">
+
+  <!-- ── TOP BAR ── -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="topbar-logo">📦</div>
+      <span class="topbar-title">Warehouse Routing Intelligence</span>
+    </div>
+    <div class="topbar-right">
+      <div class="tb-status">
+        <span id="modelDot"></span>
+        <span id="topbarStatus">No model loaded</span>
+      </div>
+      <button class="tb-btn" id="viewToggleBtn">📱 Mobile</button>
+      <button class="tb-btn" id="resetBtn">Reset</button>
+    </div>
+  </header>
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+
+    <!-- ── MODEL PANEL ── -->
+    <div class="sidebar-section-label">Model</div>
+
+    <!-- Status badge — always visible -->
+    <div id="modelStatusBadge" style="margin:.1rem .75rem .5rem; padding:.6rem .85rem; border-radius:9px; background:var(--bg3); border:1px solid var(--border); font-size:11px; display:flex; align-items:center; gap:.55rem;">
+      <span id="modelDotSide" style="width:8px;height:8px;border-radius:50%;background:var(--sub);flex-shrink:0;display:inline-block;"></span>
+      <span id="modelStatusText" style="color:var(--sub);">No model loaded</span>
+    </div>
+
+    <!-- Model info (shown when ready) -->
+    <div id="modelInfoRow" style="display:none; margin:0 .75rem .5rem; padding:.55rem .85rem; border-radius:9px; background:var(--c-green-d); border:1px solid var(--c-green);">
+      <div style="font-size:10px; font-weight:700; color:var(--c-green); margin-bottom:.2rem;">✅ MODEL ACTIVE</div>
+      <div id="modelStatusReady" style="font-size:10px; color:var(--sub); line-height:1.5;"></div>
+    </div>
+
+    <!-- Dual model status pills -->
+    <div class="model-dual-status">
+      <span class="file-ready-badge pending" id="badgeMerchant">🏪 Merchant —</span>
+      <span class="file-ready-badge pending" id="badgeTracking">🔢 Tracking —</span>
+    </div>
+
+    <!-- Training progress -->
+    <div id="trainingProgressContainer" style="margin:.1rem .75rem .4rem; display:none;">
+      <div id="trainingProgressLabel" style="font-size:10px; color:var(--sub); margin-bottom:3px;">Training…</div>
+      <div class="progress-track"><div id="trainingProgressBar">0%</div></div>
+    </div>
+
+    <!-- LOAD MODEL — always visible -->
+    <div style="margin:.1rem .75rem .35rem; padding:.75rem .85rem; border-radius:9px; background:var(--bg3); border:1px solid var(--border);">
+      <div style="font-size:11px; font-weight:700; color:var(--text); margin-bottom:.4rem;">📂 Load saved model</div>
+      <div style="font-size:10px; color:var(--sub); margin-bottom:.5rem; line-height:1.4;">Open a <code>warehouse_model.json</code> to start predicting instantly.</div>
+      <label class="file-btn-label" style="font-size:12px; padding:.5rem .75rem;">
+        Open model file
+        <input type="file" id="modelFile" accept=".json" style="display:none;">
+      </label>
+    </div>
+
+    <!-- TRAIN MODEL — collapsible wrapper -->
+    <div style="margin:.1rem .75rem .35rem;">
+      <button id="toggleTrainBtn" style="width:100%; display:flex; align-items:center; justify-content:space-between; padding:.6rem .85rem; border-radius:9px; background:var(--bg3); border:1px solid var(--border); font-size:11px; font-weight:700; color:var(--text); cursor:pointer; text-align:left;">
+        <span>🔄 Train new model</span>
+        <span id="trainArrow" style="font-size:10px; color:var(--sub); transition:transform .2s;">▼</span>
+      </button>
+      <div id="trainPanel" style="display:none; border:1px solid var(--border); border-top:none; border-radius:0 0 9px 9px; background:var(--bg3); overflow:hidden;">
+
+        <!-- FILE 1: Merchant → Warehouse -->
+        <div style="padding:.65rem .85rem .6rem; border-bottom:1px solid var(--border);">
+          <div style="display:flex; align-items:center; gap:.4rem; margin-bottom:.35rem;">
+            <span style="font-size:14px;">🏪</span>
+            <span style="font-size:11px; font-weight:700; color:var(--text);">File 1 — Merchant lookup</span>
+          </div>
+          <div style="font-size:10px; color:var(--sub); margin-bottom:.45rem; line-height:1.5;">
+            Columns: <code>Merchant, Warehouse</code><br>
+            <span style="color:var(--sub);">Used for OCR label matching &amp; merchant-based routing.</span>
+          </div>
+          <input type="file" id="csvMerchant" accept=".csv,.txt" style="width:100%; font-size:11px; padding:.4rem .6rem; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace;">
+          <div id="merchantFileStatus" style="font-size:10px; color:var(--sub); margin-top:.3rem; min-height:14px;"></div>
+        </div>
+
+        <!-- FILE 2: Tracking ID → Warehouse (GBT model) -->
+        <div style="padding:.65rem .85rem .75rem;">
+          <div style="display:flex; align-items:center; gap:.4rem; margin-bottom:.35rem;">
+            <span style="font-size:14px;">🔢</span>
+            <span style="font-size:11px; font-weight:700; color:var(--text);">File 2 — Tracking ID model</span>
+          </div>
+          <div style="font-size:10px; color:var(--sub); margin-bottom:.45rem; line-height:1.5;">
+            Columns: <code>TrackingID, Merchant, Warehouse</code><br>
+            <span style="color:var(--sub);">Trains the GBT + rule engine on tracking code patterns.</span>
+          </div>
+          <input type="file" id="csvFile" accept=".csv,.txt" style="width:100%; font-size:11px; padding:.4rem .6rem; border-radius:7px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace;">
+          <div id="trackingFileStatus" style="font-size:10px; color:var(--sub); margin-top:.3rem; min-height:14px;"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Save button — shown when model is ready -->
+    <div id="saveRow" style="display:none; margin:.1rem .75rem .35rem;">
+      <button id="saveModelBtn" style="width:100%; padding:.55rem .75rem; border-radius:9px; background:var(--c-green); color:#fff; border:none; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; cursor:pointer;">⬇ Save model file</button>
+    </div>
+
+    <div id="modelStatus" style="display:none;"></div>
+
+    <!-- Session stats -->
+    <div class="sidebar-section-label" style="margin-top:.5rem;">Session</div>
+    <div class="sidebar-stats">
+      <div class="stat-tile ber"><div class="stat-tile-label">BER3</div><div class="stat-tile-value" id="berCount">0</div></div>
+      <div class="stat-tile poz"><div class="stat-tile-label">POZ</div><div class="stat-tile-value" id="pozCount">0</div></div>
+      <div class="stat-tile total" style="grid-column:1/-1;"><div class="stat-tile-label">Total scanned</div><div class="stat-tile-value" id="totalCount">0</div></div>
+    </div>
+
+    <!-- Warehouse bars -->
+    <div class="sidebar-section-label">Warehouse split</div>
+    <div class="wh-bars" id="warehouseSummary">
+      <div style="font-size:11px;color:var(--sub);padding:.25rem 0;">No scans yet.</div>
+    </div>
+
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="main">
+
+    <!-- Unified smart search bar -->
+    <div class="lookup-bar">
+      <div class="lookup-bar-inner" style="position:relative;">
+        <span class="lookup-bar-icon">🔍</span>
+        <input type="text" id="returnIdInput" placeholder="Tracking ID or merchant name…" autocomplete="off" spellcheck="false" disabled>
+        <div id="searchDropdown" class="search-dropdown" style="display:none;"></div>
+      </div>
+      <button id="cameraBtn" title="Scan label or barcode with camera" disabled>📷</button>
+      <button id="lookupBtn" disabled>Search</button>
+    </div>
+
+    <!-- Mobile counter strip -->
+    <div class="mobile-counter-strip">
+      <div class="mc-box ber"><div class="mc-label">BER3</div><div class="mc-val" id="mberCount">0</div></div>
+      <div class="mc-box poz"><div class="mc-label">POZ</div><div class="mc-val" id="mpozCount">0</div></div>
+      <div class="mc-box total"><div class="mc-label">Total</div><div class="mc-val" id="mtotalCount">0</div></div>
+    </div>
+
+    <!-- Mobile hint -->
+    <div class="mobile-hint">Scan barcode or type ID — result appears instantly</div>
+
+    <!-- Main grid (desktop) -->
+    <div class="main-grid">
+
+      <!-- Result panel -->
+      <div class="result-panel" id="result">
+        <div class="result-empty">
+          <div class="result-empty-icon">📭</div>
+          <div>Scan or enter a tracking ID to predict the warehouse</div>
+        </div>
+      </div>
+
+      <!-- Merchant summary -->
+      <div class="merchant-panel">
+        <div class="panel-header">Merchant breakdown</div>
+        <div class="merchant-list" id="merchantSummaryBody">
+          <div class="merchant-empty">No scans yet.</div>
+        </div>
+      </div>
+
+      <!-- Recent scans -->
+      <div class="recent-panel">
+        <div class="panel-header">Recent scans</div>
+        <div class="scan-table-wrap">
+          <table class="scan-table">
+            <thead>
+              <tr>
+                <th>Tracking ID</th>
+                <th>Warehouse</th>
+                <th>Confidence</th>
+                <th>Resolved by</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="recentScansBody">
+              <tr><td colspan="5" class="scan-empty">No scans this session.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Camera panel -->
+      <div class="camera-panel" id="cameraPanel">
+        <div class="cam-panel-header">
+          <span class="cam-panel-title">📷 Camera Scanner</span>
+        </div>
+        <div class="cam-tabs">
+          <button class="cam-tab active" id="tabBarcode" data-mode="barcode">🔲 Barcode / QR</button>
+          <button class="cam-tab" id="tabLabel" data-mode="label">🏷️ Full Label OCR</button>
+        </div>
+        <div class="cam-viewport">
+          <video id="camVideo" autoplay playsinline muted></video>
+          <canvas id="camCanvas"></canvas>
+          <div class="scan-line"></div>
+          <div class="cam-corners"><span></span></div>
+          <div class="ocr-overlay"></div>
+          <!-- Start overlay — click to activate camera -->
+          <div class="cam-start-overlay" id="camStartOverlay">
+            <div class="start-icon">📷</div>
+            <div class="start-lbl">Tap to start camera</div>
+          </div>
+        </div>
+        <div class="cam-controls">
+          <button id="camCaptureBtn" disabled>⏳ Camera off</button>
+          <button class="cam-flip-btn" id="camFlipBtn" title="Flip camera">🔄</button>
+          <button class="cam-stop-btn" id="camStopBtn" title="Stop camera">■</button>
+        </div>
+        <div class="cam-status" id="camStatus">Tap "Start camera" to begin scanning.</div>
+        <div class="ocr-phase-wrap" id="ocrPhaseWrap">
+          <div>
+            <div class="ocr-phase-label">📝 Detected text</div>
+            <div class="ocr-raw-block" id="ocrRawBlock"></div>
+          </div>
+          <div>
+            <div class="ocr-phase-label">🔍 Match result</div>
+            <div class="ocr-match-block" id="ocrMatchBlock"></div>
+          </div>
+        </div>
+        <div class="cam-switch-row" id="camSwitchRow">
+          <span class="cam-switch-hint">Need to scan a barcode instead?</span>
+          <button class="cam-switch-btn" id="camSwitchToScannerBtn">🔲 Switch to Scanner</button>
+        </div>
+      </div>
+
+    </div><!-- /main-grid -->
+  </main>
+</div><!-- /dash-shell -->
+
+<!-- MOBILE FULL-SCREEN OVERLAY -->
+<div class="mob-overlay" id="mobOverlay">
+  <div class="mob-icon">📦</div>
+  <div class="mob-to-label">Send to</div>
+  <div class="mob-wh-name" id="mobWhName">—</div>
+  <div class="mob-conf-row">
+    <div class="mob-conf-badge conf-high" id="mobConfBadge">HIGH</div>
+    <div class="mob-conf-track"><div class="mob-conf-bar" id="mobConfBar" style="width:0%"></div></div>
+    <div class="mob-conf-pct" id="mobConfPct">0%</div>
+  </div>
+  <svg class="mob-timer-ring" viewBox="0 0 36 36">
+    <circle cx="18" cy="18" r="15"/>
+    <circle class="sweep" cx="18" cy="18" r="15"/>
+  </svg>
+</div>
+
+<!-- THEME FAB -->
+<button id="themeFab" title="Toggle theme">🌙</button>
+
+<script>
+
+/* ══════════════════════════════════════════════
+   THEME + VIEW TOGGLE
+══════════════════════════════════════════════ */
+document.getElementById("themeFab").addEventListener("click", () => {
+  document.body.classList.toggle("light");
+  document.getElementById("themeFab").textContent = document.body.classList.contains("light") ? "🌙" : "☀️";
+});
+
+document.getElementById("viewToggleBtn").addEventListener("click", () => {
+  const goMobile = document.body.classList.contains("desktop");
+  document.body.classList.toggle("desktop", !goMobile);
+  document.body.classList.toggle("mobile",  goMobile);
+  document.getElementById("viewToggleBtn").textContent = goMobile ? "🖥 Desktop" : "📱 Mobile";
+  hideMobOverlay();
+  if (goMobile) setTimeout(() => document.getElementById("returnIdInput").focus(), 80);
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  if (!confirm("Reset session counters?")) return;
+  resetSession();
+});
+
+/* ══════════════════════════════════════════════
+   DATA STRUCTURES
+══════════════════════════════════════════════ */
+let mapping = {};
+
+// Layer 1 — Rule engine
+let ruleStats = {};          // prefix rules learned from data
+
+// Layer 2 — Merchant lookup
+let merchantStats  = {};     // { merchantKey: { warehouse: count } }
+let pureMerchants  = {};     // { merchantKey: warehouse }  — 100% certain
+let mixedMerchants = {};     // { merchantKey: true }        — needs GBT
+
+// Layer 3 — GBT (Gradient Boosted Trees)
+let gbtModel       = null;   // array of decision trees
+let gbtFeatureMap  = {};     // feature name → index
+let gbtClasses     = [];     // ordered warehouse labels
+let gbtAccuracy    = 0;      // cross-validated accuracy 0–1
+
+// Shared stats (also saved)
+let lengthStats    = {};
+let positionalStats = {};
+let nGramStats     = {};
+let markovStats    = {};
+let learnedPatterns = {};    // kept for save/load compatibility
+
+let berCount = 0, pozCount = 0, otherCount = 0, totalCount = 0;
+let warehouseCounts = {}, merchantCounts = {};
+let recentScans = []; // {id, wh, conf, merchant, resolvedBy, ts}
+
+/* ══════════════════════════════════════════════
+   CSV PARSING
+══════════════════════════════════════════════ */
+function parseCsv(text) {
+  const result = {};
+  const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
+  let start = 0;
+  if (lines[0] && /trackingid|tracking_id|id/i.test(lines[0])) start = 1;
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i].trim(); if (!line) continue;
+    const cols = splitCsvLine(line); if (cols.length < 3) continue;
+    const [tid, merchant, warehouse] = cols.map(c => c.trim());
+    if (tid && warehouse) result[tid] = { merchant, warehouse };
+  }
+  return result;
+}
+function splitCsvLine(line) {
+  const cols = []; let cur = "", inQ = false;
+  for (const ch of line) {
+    if (ch === '"') { inQ = !inQ; }
+    else if (ch === ',' && !inQ) { cols.push(cur); cur = ""; }
+    else cur += ch;
+  }
+  cols.push(cur); return cols;
+}
+
+/* ══════════════════════════════════════════════
+   LAYER 1 — DETERMINISTIC RULE ENGINE
+   Covers ~65% of cases at ~98% accuracy.
+   Rules derived directly from the data analysis:
+   - 20-digit IDs: pos 4-7 and pos 8-11 sort codes
+   - International format: 2-letter carrier prefix
+   - (Y) internal codes: subtype after (Y)
+   - 11-digit: prefix 1155 = BER3
+   Falls through to Layer 2/3 when uncertain.
+══════════════════════════════════════════════ */
+function buildRuleStats(data) {
+  ruleStats = {};
+  // Learn prefix→warehouse frequencies up to 14 chars
+  for (const [id, {warehouse}] of Object.entries(data)) {
+    for (let len = 1; len <= Math.min(id.length, 14); len++) {
+      const k = `pfx:${id.slice(0, len)}`;
+      if (!ruleStats[k]) ruleStats[k] = {};
+      ruleStats[k][warehouse] = (ruleStats[k][warehouse] || 0) + 1;
+    }
+    // Positional 4-char windows for 20-digit IDs
+    if (/^\d{20}$/.test(id)) {
+      for (let pos = 0; pos <= 16; pos += 4) {
+        const k = `p${pos}:${id.slice(pos, pos+4)}`;
+        if (!ruleStats[k]) ruleStats[k] = {};
+        ruleStats[k][warehouse] = (ruleStats[k][warehouse] || 0) + 1;
+      }
+    }
+  }
+  // Also build the other stats needed by GBT features
+  learnedPatterns = buildPrefixMap(data);
+  buildNGramStats(data);
+  buildMarkovStats(data);
+  buildLengthStats(data);
+}
+
+function rulePredict(id) {
+  // ── Hard structural rules (deterministic) ────────────────────────────
+  // 20-digit DHL/GLS numeric
+  if (/^\d{20}$/.test(id)) {
+    const p8  = id.slice(8, 12);
+    const p4  = id.slice(4, 8);
+    // 100% certain sort codes from analysis
+    const ber3Codes = new Set(['7577','5249','5192','5139','7137','5140','9213','7824','0609']);
+    const pozCodes  = new Set(['0734','5320','7760','8803','8830','9247','8859','8852']);
+    if (ber3Codes.has(p8)) return {warehouse:'BER3', confidence:0.97, certain:true};
+    if (pozCodes.has(p8))  return {warehouse:null,   confidence:0,    certain:false}; // POZ but need GBT for POZ1/POZ2
+    // Strong prefix rules
+    const pre10 = id.slice(0, 10);
+    const ber3Pre = new Set(['0034043475','0034043452','0034043466','0034043446','0034043432','0034043473','0034043416','0034043469']);
+    const pozPre  = new Set(['0034043507']);
+    if (ber3Pre.has(pre10)) return {warehouse:'BER3', confidence:0.95, certain:true};
+    if (pozPre.has(pre10))  return {warehouse:null,   confidence:0,    certain:false};
+    // pos4-7 = 0434 → majority BER3 but not certain — let GBT decide with context
+    return {warehouse:null, confidence:0, certain:false};
+  }
+
+  // 11-digit numeric
+  if (/^\d{11}$/.test(id)) {
+    const p4 = id.slice(0, 4);
+    if (p4 === '1155') return {warehouse:'BER3', confidence:0.99, certain:true};
+    const p3 = id.slice(0, 3);
+    if (p3 === '115')  return {warehouse:'BER3', confidence:0.88, certain:true};
+    return {warehouse:null, confidence:0, certain:false};
+  }
+
+  // International format: [2 letters][digits][2 letters]
+  if (/^[A-Z]{2}\d+[A-Z]{2}$/.test(id)) {
+    const pre2 = id.slice(0, 2);
+    if (['CD','LE','CB','UE','CM'].includes(pre2)) return {warehouse:'BER3', confidence:0.96, certain:true};
+    if (['CA','UF'].includes(pre2))                 return {warehouse:null,   confidence:0,    certain:false}; // POZ1/2 split
+    return {warehouse:'BER3', confidence:0.75, certain:false}; // all end DE, lean BER3
+  }
+
+  // (Y) internal system codes
+  if (id.startsWith('(Y)')) {
+    if (/^\(Y\)#[A-Z]{2}/.test(id) && !id.includes('SRDE'))
+      return {warehouse:'BER3', confidence:0.98, certain:true};
+    if (id.includes('SRDE'))
+      return {warehouse:null, confidence:0, certain:false};  // POZ, GBT for POZ1/2
+    if (/^\(Y\)[A-Z0-9]/.test(id) && !id.startsWith('(Y)#'))
+      return {warehouse:'BER3', confidence:0.85, certain:true};
+    return {warehouse:null, confidence:0, certain:false};
+  }
+
+  // Other short numeric patterns
+  if (/^LE\d/.test(id)) return {warehouse:'BER3', confidence:0.96, certain:true};
+  if (/^SCC/.test(id))  return {warehouse:'BER3', confidence:0.99, certain:true};
+  if (/^CD3/.test(id))  return {warehouse:'BER3', confidence:0.99, certain:true};
+  if (/^9L3/.test(id))  return {warehouse:'POZ1', confidence:0.99, certain:true};
+
+  return {warehouse:null, confidence:0, certain:false};
+}
+
+/* ══════════════════════════════════════════════
+   LAYER 2 — MERCHANT LOOKUP TABLE
+   162 / 190 merchants always route to same warehouse (pure).
+   28 merchants split POZ1/POZ2 → pass to GBT.
+══════════════════════════════════════════════ */
+function buildMerchantStats(data) {
+  merchantStats  = {};
+  pureMerchants  = {};
+  mixedMerchants = {};
+
+  for (const [, {warehouse, merchant}] of Object.entries(data)) {
+    if (!merchant) continue;
+    const mk = merchant.toLowerCase().trim();
+    if (!merchantStats[mk]) merchantStats[mk] = {};
+    merchantStats[mk][warehouse] = (merchantStats[mk][warehouse] || 0) + 1;
+  }
+
+  for (const [mk, counts] of Object.entries(merchantStats)) {
+    const whs = Object.keys(counts);
+    if (whs.length === 1) {
+      pureMerchants[mk] = whs[0];
+    } else {
+      // Check if split is only within POZ variants (not BER3)
+      const hasBer  = whs.some(w => w.toUpperCase().includes('BER'));
+      const hasPoz  = whs.some(w => w.toUpperCase().includes('POZ'));
+      if (hasPoz && !hasBer) mixedMerchants[mk] = true; // only POZ split — GBT decides
+      else if (hasBer && !hasPoz) pureMerchants[mk] = whs.find(w => w.toUpperCase().includes('BER'));
+      // else truly ambiguous — GBT decides
+    }
+  }
+}
+
+function merchantPredict(merchant) {
+  if (!merchant) return {warehouse:null, confidence:0, isPure:false};
+  const mk = merchant.toLowerCase().trim();
+  if (pureMerchants[mk])  return {warehouse:pureMerchants[mk], confidence:1.0, isPure:true};
+  const counts = merchantStats[mk];
+  if (!counts)            return {warehouse:null, confidence:0, isPure:false};
+  // Mixed merchant — return majority as a soft signal
+  const t   = topEntry(counts);
+  const tot = Object.values(counts).reduce((a, v) => a + v, 0);
+  return {warehouse: t.key, confidence: t.count / tot, isPure:false};
+}
+
+/* ══════════════════════════════════════════════
+   LAYER 3 — GRADIENT BOOSTED TREES (GBT)
+   Pure JS implementation. No external libraries.
+   Trained on feature vectors derived from:
+   - Positional character bigrams (positions 0–13)
+   - Prefix hashes (4, 6, 8, 10, 12 chars)
+   - Sort code windows (positions 4-7, 8-11 for 20-digit)
+   - ID length
+   - Format type (one-hot)
+   - Suffix hash (last 2, 4 chars)
+   Handles the hard case: POZ1 vs POZ2
+══════════════════════════════════════════════ */
+
+// Feature extraction — returns a Float32Array
+function extractFeatures(id) {
+  const feats = [];
+
+  // 1. Format type (one-hot: NUM20, NUM11, INTL, Y_HASH_ALPHA, Y_HASH_NUM, Y_OTHER, OTHER)
+  const isNum20       = /^\d{20}$/.test(id);
+  const isNum11       = /^\d{11}$/.test(id);
+  const isIntl        = /^[A-Z]{2}\d+[A-Z]{2}$/.test(id);
+  const isYHashAlpha  = /^\(Y\)#[A-Z]/.test(id);
+  const isYHashNum    = /^\(Y\)#\d/.test(id);
+  const isYOther      = id.startsWith('(Y)') && !isYHashAlpha && !isYHashNum;
+  feats.push(isNum20?1:0, isNum11?1:0, isIntl?1:0, isYHashAlpha?1:0, isYHashNum?1:0, isYOther?1:0);
+
+  // 2. ID length (normalised to 0-1 over range 0-30)
+  feats.push(Math.min(id.length, 30) / 30);
+
+  // 3. Positional character codes for positions 0–13 (normalised)
+  for (let i = 0; i < 14; i++) {
+    feats.push(i < id.length ? id.charCodeAt(i) / 127 : 0);
+  }
+
+  // 4. 4-char window hashes at positions 0, 4, 8, 12 (for 20-digit sort codes)
+  for (const pos of [0, 4, 8, 12]) {
+    const chunk = id.slice(pos, pos + 4).padEnd(4, ' ');
+    let h = 0;
+    for (let i = 0; i < 4; i++) h = (h * 31 + chunk.charCodeAt(i)) & 0xffff;
+    feats.push(h / 65535);
+  }
+
+  // 5. Prefix hashes (4, 6, 8, 10, 12 chars)
+  for (const len of [4, 6, 8, 10, 12]) {
+    const chunk = id.slice(0, len).padEnd(len, ' ');
+    let h = 0;
+    for (let i = 0; i < chunk.length; i++) h = (h * 31 + chunk.charCodeAt(i)) & 0xffff;
+    feats.push(h / 65535);
+  }
+
+  // 6. Suffix hash (last 2 and 4 chars)
+  for (const slen of [2, 4]) {
+    const chunk = id.slice(-slen).padStart(slen, ' ');
+    let h = 0;
+    for (let i = 0; i < chunk.length; i++) h = (h * 31 + chunk.charCodeAt(i)) & 0xffff;
+    feats.push(h / 65535);
+  }
+
+  // 7. Digit / alpha / special char ratios
+  const digits  = (id.match(/\d/g) || []).length / Math.max(id.length, 1);
+  const alphas  = (id.match(/[A-Z]/gi) || []).length / Math.max(id.length, 1);
+  const special = 1 - digits - alphas;
+  feats.push(digits, alphas, special);
+
+  // 8. Positional bigram freq lookup (top discriminative ones from analysis)
+  const posBigrams = ['0:00','4:04','8:07','8:05','8:08','0:LE','0:CD','0:CA','0:CB'];
+  for (const pb of posBigrams) {
+    const [posStr, bigram] = pb.split(':');
+    const pos = parseInt(posStr);
+    const actual = id.slice(pos, pos + 2);
+    feats.push(actual === bigram ? 1 : 0);
+  }
+
+  return feats;
+}
+
+// Simple decision tree node
+function makeTree(X, y, classes, depth, maxDepth, minSamples) {
+  const n = y.length;
+  if (n < minSamples || depth >= maxDepth) {
+    return {leaf:true, value: leafValue(y, classes.length)};
+  }
+
+  const nFeats = X[0].length;
+  let bestGain = -Infinity, bestFeat = -1, bestThresh = 0;
+  let bestLeft = null, bestRight = null;
+
+  // Try random subset of features (sqrt(n_features))
+  const featIdx = shuffleArr(Array.from({length:nFeats}, (_,i)=>i))
+                    .slice(0, Math.max(4, Math.floor(Math.sqrt(nFeats))));
+
+  for (const fi of featIdx) {
+    const vals = y.map((_,i) => X[i][fi]);
+    const uniq = [...new Set(vals)].sort((a,b)=>a-b);
+    // Try midpoints between unique values (max 10 splits)
+    const step = Math.max(1, Math.floor(uniq.length / 10));
+    for (let ui = 0; ui < uniq.length - 1; ui += step) {
+      const thresh = (uniq[ui] + uniq[ui+1]) / 2;
+      const left  = [], right = [];
+      y.forEach((c, i) => { (X[i][fi] <= thresh ? left : right).push(c); });
+      if (!left.length || !right.length) continue;
+      const gain = gini(y, classes.length)
+                 - (left.length/n)  * gini(left,  classes.length)
+                 - (right.length/n) * gini(right, classes.length);
+      if (gain > bestGain) {
+        bestGain = gain; bestFeat = fi; bestThresh = thresh;
+        bestLeft = left; bestRight = right;
+      }
+    }
+  }
+
+  if (bestFeat === -1 || bestGain <= 0) {
+    return {leaf:true, value: leafValue(y, classes.length)};
+  }
+
+  const leftX  = X.filter((_,i) => X[i][bestFeat] <= bestThresh);
+  const rightX = X.filter((_,i) => X[i][bestFeat] >  bestThresh);
+
+  return {
+    leaf: false, feat: bestFeat, thresh: bestThresh,
+    left:  makeTree(leftX,  bestLeft,  classes, depth+1, maxDepth, minSamples),
+    right: makeTree(rightX, bestRight, classes, depth+1, maxDepth, minSamples),
+  };
+}
+
+function gini(labels, nCls) {
+  if (!labels.length) return 0;
+  const counts = new Array(nCls).fill(0);
+  labels.forEach(l => counts[l]++);
+  let impurity = 1;
+  counts.forEach(c => { const p = c/labels.length; impurity -= p*p; });
+  return impurity;
+}
+
+function leafValue(labels, nCls) {
+  const counts = new Array(nCls).fill(0);
+  labels.forEach(l => counts[l]++);
+  const tot = labels.length;
+  return counts.map(c => c/tot);  // probability distribution
+}
+
+function treePredict(node, x) {
+  if (node.leaf) return node.value;
+  return x[node.feat] <= node.thresh
+    ? treePredict(node.left,  x)
+    : treePredict(node.right, x);
+}
+
+function shuffleArr(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// Gradient Boosting: train ensemble of trees on residuals
+async function trainGbtModel(data) {
+  const cont = document.getElementById("trainingProgressContainer");
+  const bar  = document.getElementById("trainingProgressBar");
+  const lbl  = document.getElementById("trainingProgressLabel");
+  cont.style.display = "block";
+
+  const ids = Object.keys(data);
+  if (ids.length < 5) { cont.style.display = "none"; return; }
+
+  // Build class list
+  gbtClasses = [...new Set(Object.values(data).map(d => d.warehouse))].sort();
+  const nCls = gbtClasses.length;
+  const clsIdx = {};
+  gbtClasses.forEach((c, i) => clsIdx[c] = i);
+
+  // Build feature matrix
+  const allX = ids.map(id => extractFeatures(id));
+  const allY = ids.map(id => clsIdx[data[id].warehouse] ?? 0);
+
+  // 15% validation split
+  const shuffled  = shuffleArr(ids.map((_,i)=>i));
+  const valN      = Math.max(1, Math.floor(ids.length * 0.15));
+  const trainIdx  = shuffled.slice(0, ids.length - valN);
+  const valIdx    = shuffled.slice(ids.length - valN);
+
+  const tX = trainIdx.map(i => allX[i]);
+  const tY = trainIdx.map(i => allY[i]);
+  const vX = valIdx.map(i => allX[i]);
+  const vY = valIdx.map(i => allY[i]);
+
+  // Random Forest (simplified GBT): ensemble of trees with bootstrap
+  const nTrees    = 80;
+  const maxDepth  = 8;
+  const minLeaf   = 3;
+  const lr        = 0.25;
+
+  gbtModel = [];
+  lbl.textContent = "Building decision trees…";
+
+  // Current probability estimates (log-odds initialised to class frequency)
+  const freq = new Array(nCls).fill(0);
+  tY.forEach(y => freq[y]++);
+  const priorLog = freq.map(f => Math.log((f + 1) / (tY.length + nCls)));
+
+  // Probabilities for each sample
+  let probs = tX.map(() => softmax(priorLog));
+
+  for (let t = 0; t < nTrees; t++) {
+    // Bootstrap sample
+    const bsIdx = Array.from({length: tX.length}, () => Math.floor(Math.random()*tX.length));
+    const bsX   = bsIdx.map(i => tX[i]);
+    const bsY   = bsIdx.map(i => tY[i]);
+    const bsP   = bsIdx.map(i => probs[i]);
+
+    // For each class: compute residuals and fit a tree
+    const treesForStep = [];
+    for (let c = 0; c < nCls; c++) {
+      const residuals = bsY.map((y, i) => (y === c ? 1 : 0) - bsP[i][c]);
+      const tree = makeTree(bsX, residuals.map(r => r > 0 ? 1 : 0),
+                            [0, 1], 0, Math.min(maxDepth, 6), minLeaf);
+      treesForStep.push(tree);
+    }
+    gbtModel.push(treesForStep);
+
+    // Update probabilities with new trees
+    probs = tX.map((x, i) => {
+      const logits = priorLog.map((pl, c) => {
+        let s = pl;
+        for (const step of gbtModel) s += lr * (treePredict(step[c], x)[1] || 0);
+        return s;
+      });
+      return softmax(logits);
+    });
+
+    const pct = Math.round((t+1)/nTrees*100);
+    bar.style.width = pct + '%'; bar.textContent = pct + '%';
+    lbl.textContent = `Building tree ${t+1}/${nTrees}…`;
+    if ((t+1) % 10 === 0) await new Promise(r => setTimeout(r, 0)); // yield
+  }
+
+  // Validate
+  let correct = 0;
+  for (let i = 0; i < vX.length; i++) {
+    const pred = gbtModelPredict(vX[i]);
+    if (pred.classIdx === vY[i]) correct++;
+  }
+  gbtAccuracy = correct / vX.length;
+
+  bar.style.width = "100%"; bar.textContent = "100%";
+  const accPct = (gbtAccuracy * 100).toFixed(1);
+  lbl.textContent = `✓ ${nTrees} trees built — val accuracy ${accPct}%`;
+
+  document.getElementById("trainPanel").style.display = "none";
+  document.getElementById("trainArrow").style.transform = "";
+  document.getElementById("modelStatus").textContent = `Val accuracy ${accPct}%`;
+  setTimeout(() => cont.style.display = "none", 1500);
+  // Return accuracy info for caller
+  return accPct;
+}
+
+function softmax(logits) {
+  const maxL = Math.max(...logits);
+  const exps = logits.map(l => Math.exp(l - maxL));
+  const sum  = exps.reduce((a, v) => a + v, 0);
+  return exps.map(e => e / sum);
+}
+
+function gbtModelPredict(x) {
+  if (!gbtModel || !gbtModel.length || !gbtClasses.length) return null;
+  const nCls = gbtClasses.length;
+  const priorLog = new Array(nCls).fill(0); // neutral prior for prediction
+  const logits = priorLog.map((pl, c) => {
+    let s = pl;
+    for (const step of gbtModel) s += 0.25 * (treePredict(step[c], x)[1] || 0);
+    return s;
+  });
+  const p = softmax(logits);
+  let bestI = 0;
+  for (let i = 1; i < p.length; i++) if (p[i] > p[bestI]) bestI = i;
+  return {classIdx: bestI, warehouse: gbtClasses[bestI], confidence: p[bestI], probs: p};
+}
+
+/* ══════════════════════════════════════════════
+   SUPPORTING STAT BUILDERS (used by GBT features
+   and kept for save/load compatibility)
+══════════════════════════════════════════════ */
+function buildPrefixMap(data) {
+  const p = {};
+  for (const [id, {warehouse}] of Object.entries(data))
+    for (let len = 1; len <= Math.min(id.length, 14); len++) {
+      const k = id.slice(0, len);
+      if (!p[k]) p[k] = {};
+      p[k][warehouse] = (p[k][warehouse] || 0) + 1;
+    }
+  return p;
+}
+
+function buildNGramStats(data) {
+  nGramStats = {}; positionalStats = {};
+  for (const [id, {warehouse}] of Object.entries(data)) {
+    for (let n = 2; n <= 4; n++)
+      for (let i = 0; i <= id.length - n; i++) {
+        const g = id.slice(i, i+n);
+        if (!nGramStats[g]) nGramStats[g] = {};
+        nGramStats[g][warehouse] = (nGramStats[g][warehouse]||0)+1;
+      }
+    for (let i = 0; i < Math.min(id.length-1, 12); i++) {
+      const key = `${i}:${id.slice(i,i+2)}`;
+      if (!positionalStats[key]) positionalStats[key] = {};
+      positionalStats[key][warehouse] = (positionalStats[key][warehouse]||0)+1;
+    }
+  }
+}
+
+function buildMarkovStats(data) {
+  markovStats = {};
+  for (const [id, {warehouse}] of Object.entries(data))
+    for (let slen = 2; slen <= Math.min(id.length, 4); slen++) {
+      const s = `s${slen}:${id.slice(-slen)}`;
+      if (!markovStats[s]) markovStats[s] = {};
+      markovStats[s][warehouse] = (markovStats[s][warehouse]||0)+1;
+    }
+}
+
+function buildLengthStats(data) {
+  lengthStats = {};
+  for (const [id, {warehouse}] of Object.entries(data)) {
+    const l = id.length;
+    if (!lengthStats[l]) lengthStats[l] = {};
+    lengthStats[l][warehouse] = (lengthStats[l][warehouse]||0)+1;
+  }
+}
+
+
+
+/* ══════════════════════════════════════════════
+   SAVE / LOAD MODEL
+══════════════════════════════════════════════ */
+async function saveModel() {
+  const s = document.getElementById("modelStatus");
+  s.textContent = "Serialising…";
+  try {
+    // Serialise GBT trees (strip leaf arrays to plain values for JSON size)
+    const serTree = (node) => node.leaf
+      ? {l:1, v:node.value}
+      : {l:0, f:node.feat, t:node.thresh, L:serTree(node.left), R:serTree(node.right)};
+    const serialisedGbt = gbtModel ? gbtModel.map(step => step.map(serTree)) : null;
+
+    const bundle = {
+      version: 2,
+      savedAt: new Date().toISOString(),
+      gbtClasses, gbtAccuracy,
+      gbt: serialisedGbt,
+      merchantStats, pureMerchants, mixedMerchants,
+      learnedPatterns, nGramStats, markovStats, lengthStats, positionalStats,
+      ruleStats
+    };
+    const blob = new Blob([JSON.stringify(bundle)], {type:"application/json"});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "warehouse_model.json"; a.click();
+    URL.revokeObjectURL(url);
+    s.textContent = "✓ Saved as warehouse_model.json";
+  } catch(err) { s.textContent = "Save error: " + err.message; }
+}
+
+async function loadModelFromBundle(bundle) {
+  if (!bundle || !bundle.version) throw new Error("Unrecognised model file.");
+
+  // Support v2 (GBT) and v1 (legacy LSTM — restore stats only)
+  const desTree = (node) => node.l
+    ? {leaf:true,  value:node.v}
+    : {leaf:false, feat:node.f, thresh:node.t, left:desTree(node.L), right:desTree(node.R)};
+
+  if (bundle.version >= 2) {
+    gbtClasses    = bundle.gbtClasses    ?? [];
+    gbtAccuracy   = bundle.gbtAccuracy   ?? 0;
+    gbtModel      = bundle.gbt ? bundle.gbt.map(step => step.map(desTree)) : null;
+    merchantStats  = bundle.merchantStats  ?? {};
+    pureMerchants  = bundle.pureMerchants  ?? {};
+    mixedMerchants = bundle.mixedMerchants ?? {};
+    learnedPatterns= bundle.learnedPatterns ?? {};
+    nGramStats     = bundle.nGramStats     ?? {};
+    markovStats    = bundle.markovStats    ?? {};
+    lengthStats    = bundle.lengthStats    ?? {};
+    positionalStats= bundle.positionalStats?? {};
+    ruleStats      = bundle.ruleStats      ?? {};
+  } else {
+    // v1 legacy — restore stat layers, no GBT
+    learnedPatterns= bundle.learnedPatterns ?? {};
+    nGramStats     = bundle.nGramStats     ?? {};
+    markovStats    = bundle.markovStats    ?? {};
+    lengthStats    = bundle.lengthStats    ?? {};
+    positionalStats= bundle.positionalStats?? {};
+    merchantStats  = bundle.merchantStats  ?? {};
+    // Rebuild merchant tables from stats
+    rebuildMerchantTables();
+    gbtModel       = null;
+    gbtClasses     = [];
+    gbtAccuracy    = 0;
+  }
+
+  return bundle.savedAt ? new Date(bundle.savedAt).toLocaleString() : "unknown";
+}
+
+// After loading a saved model, mark both as ready
+function applyLoadedModel(when) {
+  merchantModelReady = !!(Object.keys(merchantStats).length);
+  trackingModelReady = !!(gbtModel && gbtModel.length);
+  checkBothAndEnable();
+  showMessage(`✓ Model ready (saved ${when}) — start scanning.`, false);
+}
+
+function rebuildMerchantTables() {
+  pureMerchants = {}; mixedMerchants = {};
+  for (const [mk, counts] of Object.entries(merchantStats)) {
+    const whs = Object.keys(counts);
+    if (whs.length === 1) {
+      pureMerchants[mk] = whs[0];
+    } else {
+      const hasBer = whs.some(w => w.toUpperCase().includes('BER'));
+      const hasPoz = whs.some(w => w.toUpperCase().includes('POZ'));
+      if (hasPoz && !hasBer) mixedMerchants[mk] = true;
+    }
+  }
+}
+/* ══════════════════════════════════════════════
+   MODEL PANEL — always-visible load + train
+══════════════════════════════════════════════ */
+
+// Toggle train panel open/closed
+document.getElementById("toggleTrainBtn").addEventListener("click", () => {
+  const panel = document.getElementById("trainPanel");
+  const arrow = document.getElementById("trainArrow");
+  const open  = panel.style.display === "block";
+  panel.style.display = open ? "none" : "block";
+  arrow.style.transform = open ? "" : "rotate(180deg)";
+});
+
+// Save model button
+document.getElementById("saveModelBtn").addEventListener("click", saveModel);
+
+function setModelReady(info) {
+  // Update status badge
+  const dot  = document.getElementById("modelDotSide");
+  const txt  = document.getElementById("modelStatusText");
+  dot.style.background    = "var(--c-green)";
+  dot.style.boxShadow     = "0 0 5px var(--c-green)";
+  txt.style.color         = "var(--c-green)";
+  txt.textContent         = "Model active";
+
+  // Show info row + save button
+  document.getElementById("modelInfoRow").style.display  = "block";
+  document.getElementById("modelStatusReady").textContent = info;
+  document.getElementById("saveRow").style.display       = "block";
+
+  // Enable inputs
+  document.getElementById("lookupBtn").disabled        = false;
+  document.getElementById("returnIdInput").disabled    = false;
+
+  // Topbar
+  document.getElementById("modelDot").className        = "ready";
+  document.getElementById("topbarStatus").textContent  = info.slice(0, 60);
+
+  // Collapse train panel after training
+  document.getElementById("trainPanel").style.display  = "none";
+  document.getElementById("trainArrow").style.transform = "";
+}
+
+// Compatibility stubs — stateLoad/Ready/Retrain ids no longer exist but
+// trainLstmModel / trainGbtModel may call showState; make it a no-op
+function showState(s) { /* no-op — panels always visible now */ }
+
+// Load model file
+document.getElementById("modelFile").addEventListener("change", async function(){
+  const file = this.files[0]; if (!file) return;
+  document.getElementById("modelStatus").textContent = "Reading model file…";
+  const r = new FileReader();
+  r.onload = async (e) => {
+    try {
+      const when = await loadModelFromBundle(JSON.parse(e.target.result));
+      applyLoadedModel(when);
+    } catch(err) {
+      showMessage("Failed to load model: " + err.message, true);
+      showState("load");
+    }
+  };
+  r.onerror = () => { showMessage("Could not read file.", true); showState("load"); };
+  r.readAsText(file);
+});
+
+/* ══════════════════════════════════════════════
+   THREE-LAYER CASCADE ENGINE
+   Layer 1: Rule engine (deterministic, ~65% coverage, ~98% accuracy)
+   Layer 2: Merchant lookup (pure merchants → certain; mixed → soft signal)
+   Layer 3: GBT (handles ambiguous cases, esp. POZ1 vs POZ2)
+══════════════════════════════════════════════ */
+async function hybridPredict(id, merchantHint) {
+  const details = [];
+
+  // ── LAYER 1: Exact match (infallible, only if tracking file loaded) ──
+  if (mapping[id]) {
+    const wh = mapping[id].warehouse;
+    details.push({name:"Exact match", result:{warehouse:wh, confidence:1.0}});
+    return {warehouse:wh, confidence:1.0, layerDetails:details, resolvedBy:"Exact match"};
+  }
+
+  // ── LAYER 2: Merchant lookup (if merchant name known) ─────────────────
+  const merchant = merchantHint || (mapping[id] && mapping[id].merchant) || null;
+  const mResult  = merchantPredict(merchant);
+  details.push({name:"Merchant lookup", result:{warehouse:mResult.warehouse, confidence:mResult.confidence}});
+
+  if (mResult.isPure && mResult.warehouse) {
+    return {warehouse:mResult.warehouse, confidence:1.0,
+            layerDetails:details, resolvedBy:"Merchant (pure)"};
+  }
+
+  // ── Only merchant model loaded — return soft merchant result ──────────
+  if (merchantModelReady && !trackingModelReady) {
+    if (mResult.warehouse) {
+      return {warehouse:mResult.warehouse, confidence:mResult.confidence,
+              layerDetails:details, resolvedBy:"Merchant lookup"};
+    }
+    return {warehouse:"Unknown", confidence:0, layerDetails:details, resolvedBy:"No merchant match"};
+  }
+
+  // ── LAYER 1b: Deterministic rule engine (requires tracking file) ──────
+  const ruleResult = rulePredict(id);
+  details.push({name:"Rule engine", result:{warehouse:ruleResult.warehouse, confidence:ruleResult.confidence}});
+  if (ruleResult.certain && ruleResult.warehouse) {
+    return {warehouse:ruleResult.warehouse, confidence:ruleResult.confidence,
+            layerDetails:details, resolvedBy:"Rule engine"};
+  }
+
+  // ── LAYER 3: GBT ───────────────────────────────────────────────────────
+  let gbtResult = null;
+  if (gbtModel && gbtClasses.length) {
+    const x    = extractFeatures(id);
+    const pred = gbtModelPredict(x);
+    if (pred) {
+      gbtResult = pred;
+      details.push({name:"GBT model", result:{warehouse:pred.warehouse, confidence:pred.confidence}});
+    }
+  }
+
+  // ── COMBINE: soft merchant signal + GBT ───────────────────────────────
+  if (gbtResult) {
+    if (mResult.warehouse && mResult.confidence > 0 && !mResult.isPure) {
+      const scores = {};
+      gbtClasses.forEach((cls, i) => { scores[cls] = (gbtResult.probs[i] || 0) * 0.75; });
+      const mk = merchant ? merchant.toLowerCase().trim() : null;
+      if (mk && merchantStats[mk]) {
+        const mCounts = merchantStats[mk];
+        const mTot    = Object.values(mCounts).reduce((a,v)=>a+v,0);
+        for (const [wh, cnt] of Object.entries(mCounts))
+          scores[wh] = (scores[wh] || 0) + (cnt/mTot) * 0.35;
+      }
+      const top = topEntry(scores);
+      const tot = Object.values(scores).reduce((a,v)=>a+v,0);
+      const conf = tot > 0 ? Math.min(top.count/tot, 1) : gbtResult.confidence;
+      return {warehouse:top.key, confidence:conf,
+              layerDetails:details, resolvedBy:"GBT + Merchant"};
+    }
+    return {warehouse:gbtResult.warehouse, confidence:gbtResult.confidence,
+            layerDetails:details, resolvedBy:"GBT model"};
+  }
+
+  // ── FALLBACK ───────────────────────────────────────────────────────────
+  if (mResult.warehouse) {
+    return {warehouse:mResult.warehouse, confidence:mResult.confidence * 0.7,
+            layerDetails:details, resolvedBy:"Merchant (soft)"};
+  }
+
+  return {warehouse:"Unknown", confidence:0, layerDetails:details, resolvedBy:"No signal"};
+}
+
+/* ══════════════════════════════════════════════
+   NOTIFICATION SOUND  (Web Audio API — no files)
+══════════════════════════════════════════════ */
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
+}
+
+function playSuccessSound(warehouse) {
+  try {
+    const ctx  = getAudioCtx();
+    // Resume if browser suspended the context before a user gesture
+    if (ctx.state === "suspended") ctx.resume();
+
+    // Pick tone colour by warehouse family
+    const wh = (warehouse || "").toUpperCase();
+    let freqs, gainVal;
+    if (wh.includes("BER")) {
+      // Two rising tones — bright, positive
+      freqs   = [880, 1320];
+      gainVal = 0.18;
+    } else if (wh.includes("POZ")) {
+      // Two tones — slightly warmer
+      freqs   = [740, 1109];
+      gainVal = 0.18;
+    } else {
+      // Single neutral confirm
+      freqs   = [660, 990];
+      gainVal = 0.15;
+    }
+
+    const now = ctx.currentTime;
+    freqs.forEach((freq, i) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now);
+
+      const t0 = now + i * 0.13;       // stagger each note
+      const dur = 0.14;
+
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(gainVal, t0 + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+
+      osc.start(t0);
+      osc.stop(t0 + dur + 0.01);
+    });
+  } catch(e) {
+    // Audio not available — silently ignore
+  }
+}
+
+/* ══════════════════════════════════════════════
+   UTILITY
+══════════════════════════════════════════════ */
+function topEntry(obj) {
+  if (!obj||!Object.keys(obj).length) return null;
+  let best=null;
+  for (const [key,count] of Object.entries(obj)) if (!best||count>best.count) best={key,count};
+  return best;
+}
+function getMerchantForId(id) { return (mapping[id]&&mapping[id].merchant)||"Unknown"; }
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function whClass(wh) {
+  if (!wh) return "unknown";
+  const u=wh.toUpperCase();
+  if (u.includes("BER"))     return "ber";
+  if (u.includes("POZ"))     return "poz";
+  if (u === "UNKNOWN") return "unknown";
+  return "other";
+}
+function confMeta(c) {
+  if (c>=0.8)  return {cls:"conf-high",    label:"HIGH"};
+  if (c>=0.55) return {cls:"conf-mid",     label:"MED"};
+  if (c>=0.35) return {cls:"conf-low",     label:"LOW"};
+  return              {cls:"conf-verylow", label:"VERY LOW"};
+}
+
+
+function renderRecentScans() {
+  const tbody = document.getElementById("recentScansBody");
+  if (!recentScans.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="scan-empty">No scans this session.</td></tr>';
+    return;
+  }
+  const now = Date.now();
+  tbody.innerHTML = recentScans.map(s => {
+    const wc   = whClass(s.wh);
+    const cm   = confMeta(s.conf);
+    const pct  = Math.round(s.conf * 100);
+    const secs = Math.round((now - s.ts) / 1000);
+    const ago  = secs < 60 ? `${secs}s ago` : `${Math.round(secs/60)}m ago`;
+    return `<tr>
+      <td style="font-family:'JetBrains Mono',monospace;font-size:11px;">${escHtml(s.id)}</td>
+      <td><span class="wh-chip ${wc}">${escHtml(s.wh)}</span></td>
+      <td>
+        <span class="conf-badge ${cm.cls}" style="font-size:10px;padding:.1rem .45rem;">${cm.label}</span>
+        <span class="conf-mini"> ${pct}%</span>
+      </td>
+      <td style="font-size:11px;color:var(--sub);">${escHtml(s.resolvedBy||"—")}</td>
+      <td class="time-ago">${ago}</td>
+    </tr>`;
+  }).join("");
+}
+
+/* ══════════════════════════════════════════════
+   COUNTERS & SUMMARIES
+══════════════════════════════════════════════ */
+function updateCounters(warehouse, merchant) {
+  totalCount++;
+  const u=warehouse.toUpperCase();
+  if (u.includes("BER")) berCount++;
+  else if (u.includes("POZ")) pozCount++;
+  else otherCount++;
+  warehouseCounts[warehouse]=(warehouseCounts[warehouse]||0)+1;
+  merchantCounts[merchant]=(merchantCounts[merchant]||0)+1;
+  document.getElementById("berCount").textContent=berCount;
+  document.getElementById("pozCount").textContent=pozCount;
+  document.getElementById("totalCount").textContent=totalCount;
+  // Mobile strip
+  document.getElementById("mberCount").textContent=berCount;
+  document.getElementById("mpozCount").textContent=pozCount;
+  document.getElementById("mtotalCount").textContent=totalCount;
+  renderWarehouseSummary(); renderMerchantSummary();
+}
+function renderWarehouseSummary() {
+  const el = document.getElementById("warehouseSummary");
+  if (!totalCount) { el.innerHTML = '<div style="font-size:11px;color:var(--sub);padding:.25rem 0;">No scans yet.</div>'; return; }
+  const entries = Object.entries(warehouseCounts).sort((a,b) => b[1]-a[1]);
+  const mx = entries[0][1];
+  el.innerHTML = entries.map(([wh, cnt]) => {
+    const pct = mx > 0 ? (cnt/mx*100).toFixed(0) : 0;
+    const cls = whClass(wh);
+    return `<div class="wh-bar-row">
+      <div class="wh-bar-label">${escHtml(wh)}</div>
+      <div class="wh-bar-track"><div class="wh-bar-fill ${cls}" style="width:${pct}%"></div></div>
+      <div class="wh-bar-count">${cnt}</div>
+    </div>`;
+  }).join("");
+}
+function renderMerchantSummary() {
+  const el = document.getElementById("merchantSummaryBody");
+  if (!totalCount) { el.innerHTML = '<div class="merchant-empty">No scans yet.</div>'; return; }
+  el.innerHTML = Object.entries(merchantCounts).sort((a,b) => b[1]-a[1]).map(([m, cnt]) => {
+    const pct = totalCount > 0 ? (cnt/totalCount*100).toFixed(1) : "0.0";
+    return `<div class="merchant-row">
+      <div class="merchant-name">${escHtml(m)}</div>
+      <div class="merchant-count">${cnt}</div>
+      <div class="merchant-pct">${pct}%</div>
+    </div>`;
+  }).join("");
+}
+function resetSession() {
+  recentScans = [];
+  berCount=pozCount=otherCount=totalCount=0;
+  warehouseCounts={}; merchantCounts={};
+  ["berCount","pozCount","totalCount","mberCount","mpozCount","mtotalCount"]
+    .forEach(id => { const el=document.getElementById(id); if(el) el.textContent=0; });
+  renderWarehouseSummary(); renderMerchantSummary(); renderRecentScans();
+  const r=document.getElementById("result");
+  r.className="result-panel";
+  r.innerHTML='<div class="result-empty"><div class="result-empty-icon">📭</div><div>Scan or enter a tracking ID to predict the warehouse</div></div>';
+  hideMobOverlay();
+}
+
+/* ══════════════════════════════════════════════
+   RESULT DISPLAY — DESKTOP (hero layout)
+══════════════════════════════════════════════ */
+function showDesktopResult(warehouse, confidence, layerDetails, resolvedBy, allWarehouses, merchantNames) {
+  const el  = document.getElementById("result");
+  const wc  = whClass(warehouse);
+  const cm  = confMeta(confidence);
+  const pct = Math.round(confidence * 100);
+  el.className = "result-panel has-result";
+  document.getElementById("modelDot").className = "ready";
+
+  // Build merchant tag row
+  const merchantTagHtml = (merchantNames && merchantNames.length)
+    ? `<div style="margin-bottom:.5rem;">${merchantNames.map(m =>
+        `<span class="result-merchant-tag">${escHtml(m)}</span>`).join("")}</div>`
+    : "";
+
+  // Build confidence bar
+  const confHtml = `
+    <div class="result-conf-row">
+      <div class="conf-badge ${cm.cls}">${cm.label}</div>
+      <div class="conf-track" style="flex:1;"><div class="conf-fill" style="width:${pct}%"></div></div>
+      <div class="conf-pct">${pct}%</div>
+    </div>`;
+
+  // Build secondary warehouse bars (all warehouses ranked)
+  let secondaryHtml = "";
+  if (allWarehouses && allWarehouses.length > 1) {
+    const maxCnt = allWarehouses[0].count;
+    secondaryHtml = `<div class="result-secondary">
+      <div class="result-secondary-label">All matching warehouses</div>
+      ${allWarehouses.map(({wh, count, total}) => {
+        const wClass = whClass(wh);
+        const barPct = maxCnt > 0 ? Math.round(count / maxCnt * 100) : 0;
+        const sharePct = total > 0 ? Math.round(count / total * 100) : 0;
+        return `<div class="result-secondary-row">
+          <div class="result-secondary-badge ${wClass}">${escHtml(wh)}</div>
+          <div class="result-secondary-bar-wrap">
+            <div class="result-secondary-track">
+              <div class="result-secondary-fill ${wClass}" style="width:${barPct}%"></div>
+            </div>
+          </div>
+          <div class="result-secondary-pct">${sharePct}%</div>
+        </div>`;
+      }).join("")}
+    </div>`;
+  }
+
+  const viaHtml = resolvedBy
+    ? `<div class="result-resolved" style="margin-bottom:.4rem;">Via <span>${escHtml(resolvedBy)}</span></div>`
+    : "";
+
+  el.innerHTML = `
+    <div class="result-hero">
+      <div class="result-hero-label">Send to warehouse</div>
+      <div class="result-hero-badge ${wc}">${escHtml(warehouse)}</div>
+      ${merchantTagHtml}
+      ${confHtml}
+      ${viaHtml}
+    </div>
+    ${secondaryHtml}
+  `;
+}
+
+/* ══════════════════════════════════════════════
+   RESULT DISPLAY — MOBILE OVERLAY
+══════════════════════════════════════════════ */
+let mobTimer=null;
+
+function showMobOverlay(warehouse, confidence) {
+  const overlay=document.getElementById("mobOverlay");
+  const nameEl=document.getElementById("mobWhName");
+  const badgeEl=document.getElementById("mobConfBadge");
+  const barEl=document.getElementById("mobConfBar");
+  const pctEl=document.getElementById("mobConfPct");
+  const sweep=overlay.querySelector(".sweep");
+
+  const wc=whClass(warehouse), cm=confMeta(confidence), pct=Math.round(confidence*100);
+
+  // Reset transition so timer ring restarts cleanly
+  sweep.style.transition="none";
+  sweep.style.strokeDashoffset="94.2";
+  overlay.className="mob-overlay"; // remove .show and colour classes first
+
+  nameEl.textContent=warehouse;
+  nameEl.className="mob-wh-name "+wc;
+  badgeEl.textContent=cm.label;
+  badgeEl.className="mob-conf-badge "+cm.cls;
+  pctEl.textContent=pct+"%";
+  barEl.style.width="0%";
+
+  // Force reflow then animate in
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    overlay.className="mob-overlay show"+(wc&&wc!=="other"?" "+wc:"");
+    barEl.style.width=pct+"%";
+    sweep.style.transition="stroke-dashoffset 2.4s linear";
+    sweep.style.strokeDashoffset="0";
+  }));
+
+  if (mobTimer) clearTimeout(mobTimer);
+  mobTimer=setTimeout(()=>{
+    hideMobOverlay();
+    document.getElementById("returnIdInput").value="";
+    document.getElementById("returnIdInput").focus();
+  }, 2600);
+}
+
+function hideMobOverlay() {
+  document.getElementById("mobOverlay").classList.remove("show");
+}
+
+function showMessage(msg, isError) {
+  const el = document.getElementById("result");
+  el.className = "result-panel has-result";
+  el.innerHTML = isError
+    ? `<div class="result-error">⚠ ${escHtml(msg)}</div>`
+    : `<div class="result-empty"><div class="result-empty-icon">ℹ️</div><div>${escHtml(msg)}</div></div>`;
+  // Update topbar
+  document.getElementById("topbarStatus").textContent = msg.slice(0, 60);
+}
+
+/* ══════════════════════════════════════════════
+   CSV LOADING — TWO FILES
+   File 1: Merchant,Warehouse  → merchant lookup
+   File 2: TrackingID,Merchant,Warehouse → GBT model
+══════════════════════════════════════════════ */
+
+// Tracks which models are ready
+let merchantModelReady  = false;
+let trackingModelReady  = false;
+
+function checkBothAndEnable() {
+  // Update status pills
+  const bm = document.getElementById("badgeMerchant");
+  const bt = document.getElementById("badgeTracking");
+  if (bm) {
+    bm.className = "file-ready-badge " + (merchantModelReady ? "ready" : "pending");
+    bm.textContent = merchantModelReady
+      ? "🏪 Merchant ✓"
+      : "🏪 Merchant —";
+  }
+  if (bt) {
+    bt.className = "file-ready-badge " + (trackingModelReady ? "ready" : "pending");
+    bt.textContent = trackingModelReady
+      ? "🔢 Tracking ✓"
+      : "🔢 Tracking —";
+  }
+
+  // Enable prediction as soon as at least one model is ready
+  const anyReady = merchantModelReady || trackingModelReady;
+  document.getElementById("lookupBtn").disabled    = !anyReady;
+  document.getElementById("returnIdInput").disabled = !anyReady;
+  if (anyReady) {
+    const parts = [];
+    if (merchantModelReady) parts.push("Merchant ✓");
+    if (trackingModelReady) parts.push("Tracking ✓");
+    setModelReady(parts.join(" · "));
+  }
+}
+
+function setFileStatus(elId, msg, ok) {
+  const el = document.getElementById(elId);
+  if (el) {
+    el.textContent = msg;
+    el.style.color = ok ? "var(--c-green)" : ok === false ? "var(--c-red)" : "var(--sub)";
+  }
+}
+
+// ── File 1: Merchant CSV ─────────────────────────────────
+function parseMerchantCsv(text) {
+  // Accepts: "Merchant,Warehouse" OR "TrackingID,Merchant,Warehouse"
+  // Returns array of {merchant, warehouse}
+  const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
+  let start = 0;
+  const header = lines[0] ? lines[0].toLowerCase() : "";
+  if (header.includes("merchant") || header.includes("warehouse") || header.includes("trackingid") || header.includes("id")) {
+    start = 1;
+  }
+  const rows = [];
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i].trim(); if (!line) continue;
+    const cols = splitCsvLine(line).map(c => c.trim());
+    if (cols.length >= 3) {
+      // 3-col: TrackingID, Merchant, Warehouse
+      const [, merchant, warehouse] = cols;
+      if (merchant && warehouse) rows.push({ merchant, warehouse });
+    } else if (cols.length === 2) {
+      // 2-col: Merchant, Warehouse
+      const [merchant, warehouse] = cols;
+      if (merchant && warehouse) rows.push({ merchant, warehouse });
+    }
+  }
+  return rows;
+}
+
+document.getElementById("csvMerchant").addEventListener("change", async function() {
+  const file = this.files[0]; if (!file) return;
+  setFileStatus("merchantFileStatus", "Loading…", null);
+  const r = new FileReader();
+  r.onload = async (e) => {
+    try {
+      const rows = parseMerchantCsv(e.target.result);
+      if (!rows.length) {
+        setFileStatus("merchantFileStatus", "No valid rows. Need: Merchant, Warehouse", false);
+        return;
+      }
+      // Build merchant stats from these rows
+      merchantStats  = {};
+      pureMerchants  = {};
+      mixedMerchants = {};
+      for (const { merchant, warehouse } of rows) {
+        const mk = merchant.toLowerCase().trim();
+        if (!merchantStats[mk]) merchantStats[mk] = {};
+        merchantStats[mk][warehouse] = (merchantStats[mk][warehouse] || 0) + 1;
+      }
+      rebuildMerchantTables();
+
+      const merchantCount = Object.keys(merchantStats).length;
+      const pureCount     = Object.keys(pureMerchants).length;
+      merchantModelReady = true;
+      setFileStatus("merchantFileStatus",
+        `✓ ${rows.length} rows · ${merchantCount} merchants · ${pureCount} pure`, true);
+      checkBothAndEnable();
+    } catch(err) {
+      setFileStatus("merchantFileStatus", "Error: " + err.message, false);
+    }
+  };
+  r.onerror = () => setFileStatus("merchantFileStatus", "Could not read file.", false);
+  r.readAsText(file);
+});
+
+// ── File 2: Tracking ID CSV ──────────────────────────────
+document.getElementById("csvFile").addEventListener("change", function(){
+  const file = this.files[0]; if (!file) return;
+  setFileStatus("trackingFileStatus", "Loading…", null);
+  showMessage("Loading tracking CSV…", false);
+  document.getElementById("lookupBtn").disabled = true;
+  const r = new FileReader();
+  r.onload = async (e) => {
+    try {
+      mapping = parseCsv(e.target.result);
+      const count = Object.keys(mapping).length;
+      if (!count) {
+        setFileStatus("trackingFileStatus", "No valid rows. Need: TrackingID, Merchant, Warehouse", false);
+        showMessage("No valid rows found in tracking CSV.", true);
+        return;
+      }
+      // Build all GBT layers
+      buildRuleStats(mapping);
+      // Also update merchant stats from this file (merge/extend)
+      buildMerchantStats(mapping);
+      buildNGramStats(mapping);
+      buildMarkovStats(mapping);
+      buildLengthStats(mapping);
+      setFileStatus("trackingFileStatus", `${count} IDs loaded — training model…`, null);
+      showMessage(`Loaded ${count} tracking IDs — building model…`, false);
+      const accPct = await trainGbtModel(mapping);
+      trackingModelReady = true;
+      const warehouseCount = new Set(Object.values(mapping).map(d=>d.warehouse)).size;
+      setFileStatus("trackingFileStatus",
+        `✓ ${count} IDs · ${warehouseCount} warehouses · GBT ${accPct}% acc`, true);
+      showMessage(`✓ Tracking model ready (${accPct}% accuracy).`, false);
+      checkBothAndEnable();
+    } catch(err) {
+      setFileStatus("trackingFileStatus", "Error: " + err.message, false);
+      showMessage("Error: " + err.message, true);
+    }
+  };
+  r.onerror = () => {
+    setFileStatus("trackingFileStatus", "Could not read file.", false);
+    showMessage("Could not read file.", true);
+  };
+  r.readAsText(file);
+});
+
+/* ══════════════════════════════════════════════
+   UNIFIED SEARCH — tracking ID + merchant name
+══════════════════════════════════════════════ */
+
+// Search merchant stats for partial name matches.
+// Returns array of { key, topWh, count, total, conf } sorted by count desc.
+function searchMerchantsByName(query) {
+  if (!merchantStats || !query) return [];
+  const q = query.toLowerCase().trim();
+  const results = [];
+  for (const [key, counts] of Object.entries(merchantStats)) {
+    if (!key.includes(q)) continue;
+    const entries = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+    const total   = entries.reduce((s,[,c])=>s+c, 0);
+    const [topWh, topCnt] = entries[0];
+    results.push({ key, topWh, count: topCnt, total, conf: topCnt/total, allWarehouses: entries });
+  }
+  return results.sort((a,b) => b.count - a.count);
+}
+
+// Aggregate warehouse counts across multiple merchant matches
+function aggregateWarehouses(merchantMatches) {
+  const whMap = {};
+  let grand = 0;
+  for (const m of merchantMatches) {
+    for (const [wh, cnt] of m.allWarehouses) {
+      whMap[wh] = (whMap[wh] || 0) + cnt;
+      grand += cnt;
+    }
+  }
+  return Object.entries(whMap)
+    .sort((a,b) => b[1]-a[1])
+    .map(([wh, count]) => ({ wh, count, total: grand }));
+}
+
+// Highlight query match inside a string
+function highlightMatch(str, query) {
+  if (!query) return escHtml(str);
+  const idx = str.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return escHtml(str);
+  return escHtml(str.slice(0, idx)) +
+    `<em>${escHtml(str.slice(idx, idx + query.length))}</em>` +
+    escHtml(str.slice(idx + query.length));
+}
+
+// ── Live dropdown ──────────────────────────────
+const searchInput    = document.getElementById("returnIdInput");
+const searchDropdown = document.getElementById("searchDropdown");
+
+let dropdownSelectedIdx = -1;
+let dropdownItems = [];
+
+function buildDropdown(query) {
+  if (!query || query.length < 2) { hideDropdown(); return; }
+  const matches = searchMerchantsByName(query).slice(0, 10);
+  if (!matches.length) { hideDropdown(); return; }
+
+  dropdownItems = matches;
+  dropdownSelectedIdx = -1;
+
+  const html = matches.map((m, i) => {
+    const wc = whClass(m.topWh);
+    const pct = Math.round(m.conf * 100);
+    return `<div class="sd-row" data-idx="${i}">
+      <div class="sd-row-name">${highlightMatch(m.key, query)}</div>
+      <div class="sd-row-wh ${wc}">${escHtml(m.topWh)}</div>
+      <div class="sd-row-count">${pct}%</div>
+    </div>`;
+  }).join("");
+
+  searchDropdown.innerHTML = `<div class="sd-section-label">🏪 Merchants (${matches.length})</div>` + html;
+  searchDropdown.style.display = "block";
+
+  // Click a suggestion
+  searchDropdown.querySelectorAll(".sd-row").forEach(row => {
+    row.addEventListener("mousedown", e => {
+      e.preventDefault();
+      const idx = parseInt(row.dataset.idx);
+      runMerchantSearch(dropdownItems[idx]);
+    });
+  });
+}
+
+function hideDropdown() {
+  searchDropdown.style.display = "none";
+  dropdownItems = [];
+  dropdownSelectedIdx = -1;
+}
+
+searchInput.addEventListener("input", () => {
+  buildDropdown(searchInput.value.trim());
+});
+
+searchInput.addEventListener("blur", () => {
+  setTimeout(hideDropdown, 150);
+});
+
+// Keyboard nav in dropdown
+searchInput.addEventListener("keydown", (e) => {
+  if (searchDropdown.style.display === "none") {
+    if (e.key === "Enter") {
+      if (!document.getElementById("lookupBtn").disabled) runSearch();
+    }
+    return;
+  }
+  const rows = searchDropdown.querySelectorAll(".sd-row");
+  if (e.key === "ArrowDown") {
+    e.preventDefault();
+    dropdownSelectedIdx = Math.min(dropdownSelectedIdx + 1, rows.length - 1);
+    rows.forEach((r,i) => r.style.background = i === dropdownSelectedIdx ? "var(--bg3)" : "");
+  } else if (e.key === "ArrowUp") {
+    e.preventDefault();
+    dropdownSelectedIdx = Math.max(dropdownSelectedIdx - 1, -1);
+    rows.forEach((r,i) => r.style.background = i === dropdownSelectedIdx ? "var(--bg3)" : "");
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (dropdownSelectedIdx >= 0 && dropdownItems[dropdownSelectedIdx]) {
+      runMerchantSearch(dropdownItems[dropdownSelectedIdx]);
+    } else {
+      hideDropdown();
+      runSearch();
+    }
+  } else if (e.key === "Escape") {
+    hideDropdown();
+  }
+});
+
+// ── Run a merchant-name search (from dropdown selection or full search) ──
+function runMerchantSearch(merchantMatch) {
+  hideDropdown();
+  searchInput.value = merchantMatch.key;
+
+  // Gather all merchants whose key contains the search term (for aggregate view)
+  const allMatches = searchMerchantsByName(merchantMatch.key);
+  const aggWarehouses = aggregateWarehouses(allMatches.length ? allMatches : [merchantMatch]);
+  const topWh   = aggWarehouses[0].wh;
+  const topConf = aggWarehouses[0].count / aggWarehouses[0].total;
+  const merchantNames = allMatches.slice(0, 5).map(m => m.key);
+
+  updateCounters(topWh, merchantMatch.key);
+  recentScans.unshift({
+    id: `NAME:${merchantMatch.key}`,
+    wh: topWh, conf: topConf, merchant: merchantMatch.key,
+    resolvedBy: "Merchant name search", ts: Date.now()
+  });
+  if (recentScans.length > 50) recentScans.pop();
+
+  if (document.body.classList.contains("mobile")) {
+    showMobOverlay(topWh, topConf);
+  } else {
+    showDesktopResult(topWh, topConf, null, "Merchant name search", aggWarehouses, merchantNames);
+    renderRecentScans();
+  }
+}
+
+// ── Main search — detects tracking ID vs merchant name ──
+async function runSearch() {
+  const raw = searchInput.value.trim();
+  if (!raw) return;
+  hideDropdown();
+
+  const btn = document.getElementById("lookupBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Searching…"; }
+
+  try {
+    // Heuristic: looks like a tracking ID if it's 6+ chars and alphanumeric-heavy
+    const looksLikeId = /^[A-Za-z0-9\-]{6,}$/.test(raw) && !/\s/.test(raw);
+    const merchantMatches = searchMerchantsByName(raw);
+
+    if (looksLikeId && mapping[raw.toUpperCase()]) {
+      // Exact tracking ID match — use the full prediction pipeline
+      const id       = raw.toUpperCase();
+      const merchant = getMerchantForId(id);
+      const result   = await hybridPredict(id, merchant !== "Unknown" ? merchant : null);
+      const wh       = result.warehouse || "Unknown";
+      const conf     = result.confidence || 0;
+
+      // Also gather any merchant-name matches to enrich secondary view
+      const aggWh = result.layerDetails
+        ? result.layerDetails.filter(l=>l.result&&l.result.warehouse)
+            .map(l=>({ wh: l.result.warehouse, count: Math.round(l.result.confidence*100), total: 100 }))
+        : [];
+
+      updateCounters(wh, merchant);
+      recentScans.unshift({ id, wh, conf, merchant, resolvedBy: result.resolvedBy||"", ts: Date.now() });
+      if (recentScans.length > 50) recentScans.pop();
+
+      if (document.body.classList.contains("mobile")) {
+        showMobOverlay(wh, conf);
+      } else {
+        showDesktopResult(wh, conf, result.layerDetails, result.resolvedBy||"",
+          aggWh.length ? aggWh : null,
+          merchant !== "Unknown" ? [merchant] : null);
+        renderRecentScans();
+      }
+
+    } else if (merchantMatches.length) {
+      // Merchant name search
+      runMerchantSearch(merchantMatches[0]);
+
+    } else if (looksLikeId) {
+      // Unknown tracking ID — run prediction anyway (model-based)
+      const id       = raw;
+      const merchant = getMerchantForId(id);
+      const result   = await hybridPredict(id, merchant !== "Unknown" ? merchant : null);
+      const wh       = result.warehouse || "Unknown";
+      const conf     = result.confidence || 0;
+
+      updateCounters(wh, merchant);
+      recentScans.unshift({ id, wh, conf, merchant, resolvedBy: result.resolvedBy||"", ts: Date.now() });
+      if (recentScans.length > 50) recentScans.pop();
+
+      if (document.body.classList.contains("mobile")) {
+        showMobOverlay(wh, conf);
+      } else {
+        showDesktopResult(wh, conf, result.layerDetails, result.resolvedBy||"", null,
+          merchant !== "Unknown" ? [merchant] : null);
+        renderRecentScans();
+      }
+    } else {
+      showMessage("No matching tracking ID or merchant name found.", false);
+    }
+  } catch(err) {
+    if (!document.body.classList.contains("mobile")) showMessage("Error: " + err.message, true);
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = "Search"; }
+}
+
+// Keep old name as alias (used by camera scanner)
+async function runPrediction() { await runSearch(); }
+
+document.getElementById("lookupBtn").addEventListener("click", runSearch);
+
+/* ══════════════════════════════════════════════
+   CAMERA SCANNER
+══════════════════════════════════════════════ */
+(function() {
+
+  // ── State ──────────────────────────────────────
+  let stream            = null;
+  let scanMode          = "barcode";   // "barcode" | "label"
+  let facingMode        = "environment";
+  let barcodeReader     = null;
+  let autoScanInterval  = null;
+  let ocrLoopInterval   = null;
+  let tesseractWorker   = null;
+  let tesseractReady    = false;
+  let tesseractBusy     = false;
+  let barcodeApiAvailable = false;
+  let ocrCooldown       = false;   // brief pause between scans after a hit
+
+  // BarcodeDetector (Chrome / Edge)
+  if ("BarcodeDetector" in window) {
+    barcodeApiAvailable = true;
+    barcodeReader = new BarcodeDetector({ formats: [
+      "code_128","code_39","code_93","codabar","ean_13","ean_8",
+      "itf","upc_a","upc_e","qr_code","data_matrix","pdf417","aztec"
+    ]});
+  }
+
+  // ══ MERCHANT MATCHING — full + partial name support ══════
+  //
+  // Strategy (in order of priority):
+  //   1. Exact substring  — the whole merchant key appears in the OCR text
+  //   2. Partial token    — at least MIN_TOKEN_MATCH consecutive word-tokens
+  //      of the merchant name appear together in the OCR text, scoring by
+  //      the fraction of tokens matched (longer partial = higher score)
+  //
+  // Both tiers are scored so a longer exact match beats a shorter one,
+  // and a higher token-coverage partial beats a lower one.
+  // Returns { warehouse, confidence, matchedName, certain, partial, matchScore }
+  // or null if nothing cleared the threshold.
+
+  const MIN_TOKEN_MATCH = 2;   // minimum consecutive tokens for a partial hit
+  const PARTIAL_SCORE_THRESHOLD = 0.40; // fraction of merchant tokens that must match
+
+  function tokenise(str) {
+    return str.toLowerCase().replace(/[^a-z0-9\s]/g," ").trim().split(/\s+/).filter(Boolean);
+  }
+
+  // Returns the longest run of consecutive tokens from `needleTokens`
+  // that appears as a contiguous sequence in `haystackTokens`.
+  // Returns { run, startIdx } where run = matched consecutive tokens array.
+  function longestConsecutiveRun(needleTokens, haystackTokens) {
+    let best = { run: [], startIdx: -1 };
+    for (let i = 0; i < needleTokens.length; i++) {
+      let j = 0;
+      // Find where needleTokens[i] appears in haystack
+      let hIdx = haystackTokens.indexOf(needleTokens[i]);
+      while (hIdx !== -1) {
+        // Extend the run forward
+        let runLen = 1;
+        while (
+          i + runLen < needleTokens.length &&
+          hIdx + runLen < haystackTokens.length &&
+          haystackTokens[hIdx + runLen] === needleTokens[i + runLen]
+        ) { runLen++; }
+        if (runLen > best.run.length) {
+          best = { run: needleTokens.slice(i, i + runLen), startIdx: hIdx };
+        }
+        // Look for next occurrence of needleTokens[i] in haystack after hIdx
+        hIdx = haystackTokens.indexOf(needleTokens[i], hIdx + 1);
+      }
+    }
+    return best;
+  }
+
+  function lookupMerchantInText(ocrText) {
+    if (!merchantStats || !Object.keys(merchantStats).length) return null;
+
+    const haystackTokens = tokenise(ocrText);
+    const haystackRaw    = ocrText.toLowerCase().replace(/[^a-z0-9\s]/g, " ");
+
+    let bestKey   = null;
+    let bestScore = 0;      // 0–1+; exact full match scores > 1 to beat any partial
+    let bestPartial = false;
+
+    for (const key of Object.keys(merchantStats)) {
+      const needleTokens = tokenise(key);
+      if (!needleTokens.length || needleTokens.join(" ").length < 3) continue;
+
+      // ── Tier 1: exact substring of the full normalised key ──
+      const needleStr = needleTokens.join(" ");
+      if (haystackRaw.includes(needleStr)) {
+        // Score = 1 + fractional length so longer exact match wins
+        const score = 1 + needleStr.length / 200;
+        if (score > bestScore) {
+          bestScore = score; bestKey = key; bestPartial = false;
+        }
+        continue; // no need for token check if we already have an exact hit
+      }
+
+      // ── Tier 2: partial consecutive token match ──
+      if (needleTokens.length >= MIN_TOKEN_MATCH) {
+        const { run } = longestConsecutiveRun(needleTokens, haystackTokens);
+        if (run.length >= MIN_TOKEN_MATCH) {
+          const score = run.length / needleTokens.length;
+          if (score >= PARTIAL_SCORE_THRESHOLD && score > bestScore) {
+            bestScore = score; bestKey = key; bestPartial = true;
+          }
+        }
+      } else {
+        // Single-token merchant — only accept if it's ≥5 chars (avoid noise)
+        if (needleTokens[0].length >= 5 && haystackTokens.includes(needleTokens[0])) {
+          const score = 0.5; // lower than multi-token partial
+          if (score > bestScore) {
+            bestScore = score; bestKey = key; bestPartial = true;
+          }
+        }
+      }
+    }
+
+    if (!bestKey) return null;
+
+    const counts  = merchantStats[bestKey];
+    const entries = Object.entries(counts).sort((a,b) => b[1]-a[1]);
+    const total   = entries.reduce((s,[,c])=>s+c, 0);
+    const [topWh, topCnt] = entries[0];
+    const routeConf = topCnt / total;
+
+    return {
+      warehouse:   topWh,
+      confidence:  routeConf,
+      matchedName: bestKey,
+      certain:     !!pureMerchants[bestKey] && !bestPartial,
+      partial:     bestPartial,
+      matchScore:  bestScore
+    };
+  }
+
+  // ── UI refs ────────────────────────────────────
+  const panel        = document.getElementById("cameraPanel");
+  const video        = document.getElementById("camVideo");
+  const canvas       = document.getElementById("camCanvas");
+  const captureBtn   = document.getElementById("camCaptureBtn");
+  const statusEl     = document.getElementById("camStatus");
+  const phaseWrap    = document.getElementById("ocrPhaseWrap");
+  const rawBlock     = document.getElementById("ocrRawBlock");
+  const matchBlock   = document.getElementById("ocrMatchBlock");
+  const switchRow    = document.getElementById("camSwitchRow");
+  const startOverlay = document.getElementById("camStartOverlay");
+  let cameraActive   = false;
+
+  function setStatus(msg, type="") {
+    statusEl.className = "cam-status" + (type ? " "+type : "");
+    statusEl.innerHTML = msg;
+  }
+  function setCaptureBtnState(txt, disabled=false) {
+    captureBtn.textContent = txt;
+    captureBtn.disabled    = disabled;
+  }
+
+  function showRawText(text) { showRawTextWithWords(text, []); }
+  function showMatchResult(merchantHit) {
+    if (merchantHit) {
+      const pct   = Math.round(merchantHit.confidence * 100);
+      const label = merchantHit.certain ? "exact match"
+        : merchantHit.partial ? `partial match · ${pct}% of orders` : `${pct}% of orders`;
+      matchBlock.className = "ocr-match-block hit";
+      matchBlock.innerHTML =
+        `✅ <strong>${escHtml(merchantHit.matchedName)}</strong> → ` +
+        `<strong>${escHtml(merchantHit.warehouse)}</strong>` +
+        ` <span style="opacity:.7;font-size:10px;">(${label})</span>`;
+    } else {
+      matchBlock.className = "ocr-match-block miss";
+      const loaded = Object.keys(merchantStats || {}).length;
+      matchBlock.innerHTML = loaded
+        ? `⚠️ No merchant keyword matched <span style="opacity:.7;font-size:10px;">(${loaded} merchants loaded)</span>`
+        : `⚠️ No merchant data loaded — upload a Merchant CSV first`;
+    }
+  }
+  function clearOcrDisplay() {
+    phaseWrap.classList.remove("visible");
+    rawBlock.innerHTML = "";
+    matchBlock.className = "ocr-match-block";
+    matchBlock.innerHTML = "";
+    switchRow.classList.remove("visible");
+    ocrCooldown = false;
+  }
+
+  // ── Start / Stop camera ────────────────────────
+  startOverlay.addEventListener("click", startCamera);
+  document.getElementById("camStopBtn").addEventListener("click", stopCamera);
+
+  async function startCamera() {
+    if (cameraActive) return;
+    startOverlay.classList.add("hidden");
+    cameraActive = true;
+    clearOcrDisplay();
+    await startStream();
+    if (scanMode === "barcode") startBarcodeLoop();
+    else                        startOcrLoop();
+  }
+
+  function stopCamera() {
+    stopBarcodeLoop(); stopOcrLoop(); stopStream();
+    cameraActive = false;
+    startOverlay.classList.remove("hidden");
+    setCaptureBtnState("⏳ Camera off", true);
+    setStatus("Tap \u201cStart camera\u201d to begin scanning.");
+    clearOcrDisplay();
+  }
+
+  // Legacy no-ops (called by scan handlers for resume logic)
+  function openCamera()  {}
+  function closeCamera() {}
+
+  async function startStream() {
+    stopStream();
+    setStatus("Starting camera…");
+    setCaptureBtnState("⏳ Starting…", true);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+      });
+      video.srcObject = stream;
+      await video.play();
+    } catch(err) {
+      setStatus("Camera error: " + err.message, "error");
+      setCaptureBtnState("Camera unavailable", true);
+    }
+  }
+  function stopStream() {
+    if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  }
+
+  // ── Camera flip ────────────────────────────────
+  document.getElementById("camFlipBtn").addEventListener("click", async () => {
+    if (!cameraActive) return;
+    facingMode = facingMode === "environment" ? "user" : "environment";
+    stopBarcodeLoop(); stopOcrLoop();
+    await startStream();
+    if (scanMode === "barcode") startBarcodeLoop();
+    else                        startOcrLoop();
+  });
+
+  // ── Mode tabs ──────────────────────────────────
+  document.querySelectorAll(".cam-tab").forEach(tab => {
+    tab.addEventListener("click", async () => {
+      document.querySelectorAll(".cam-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      scanMode = tab.dataset.mode;
+      panel.className = "camera-panel mode-" + scanMode;
+      clearOcrDisplay();
+      stopBarcodeLoop(); stopOcrLoop();
+      if (!cameraActive) return;
+      if (scanMode === "barcode") {
+        startBarcodeLoop();
+      } else {
+        setCaptureBtnState("🔄 Scanning label…", true);
+        setStatus("Hold the label steady — scanning automatically…");
+        startOcrLoop();
+      }
+    });
+  });
+
+  // ── Switch-to-scanner button ───────────────────
+  document.getElementById("camSwitchToScannerBtn").addEventListener("click", () => {
+    document.querySelectorAll(".cam-tab").forEach(t => t.classList.remove("active"));
+    document.getElementById("tabBarcode").classList.add("active");
+    scanMode = "barcode";
+    panel.className = "camera-panel mode-barcode";
+    clearOcrDisplay();
+    stopOcrLoop();
+    if (cameraActive) startBarcodeLoop();
+    setStatus("Point at a barcode or QR code — detecting automatically…");
+  });
+
+  // ══ BARCODE MODE ══════════════════════════════
+  function startBarcodeLoop() {
+    stopBarcodeLoop();
+    if (!barcodeApiAvailable) {
+      setStatus("BarcodeDetector not supported in this browser (use Chrome/Edge) or switch to Label OCR mode.", "error");
+      setCaptureBtnState("Not supported", true);
+      return;
+    }
+    setCaptureBtnState("🔲 Auto-scanning…", true);
+    setStatus("Point at a barcode or QR code — detecting automatically…");
+    autoScanInterval = setInterval(async () => {
+      if (!barcodeReader || !video.videoWidth) return;
+      try {
+        const found = await barcodeReader.detect(video);
+        if (found.length) {
+          stopBarcodeLoop();
+          handleBarcodeDetected(found[0].rawValue.trim());
+        }
+      } catch(_) {}
+    }, 250);
+  }
+  function stopBarcodeLoop() {
+    if (autoScanInterval) { clearInterval(autoScanInterval); autoScanInterval = null; }
+  }
+
+  function handleBarcodeDetected(value) {
+    setStatus(`✅ Barcode: <strong>${escHtml(value)}</strong>`, "success");
+    setCaptureBtnState("✅ Detected!", true);
+    if (navigator.vibrate) navigator.vibrate([60]);
+
+    // Apply result to dashboard immediately, keep camera open
+    document.getElementById("returnIdInput").value = value;
+    if (!document.getElementById("lookupBtn").disabled) runPrediction();
+
+    // Resume scanning after a short pause so the same barcode isn't double-fired
+    setTimeout(() => {
+      setStatus("Point at a barcode or QR code — detecting automatically…");
+      startBarcodeLoop();
+    }, 300);
+  }
+
+  // ══ LABEL OCR MODE — fully automatic, two-phase ══════════
+  async function initTesseract() {
+    if (tesseractReady || tesseractWorker) return true;
+    setStatus('<span class="cam-spinner"></span>Loading OCR engine…', "info");
+    try {
+      if (!window.Tesseract) {
+        await loadScript("https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js");
+      }
+      tesseractWorker = await Tesseract.createWorker("eng", 1, {
+        logger: m => {
+          if (m.status === "recognizing text") {
+            const pct = Math.round((m.progress||0)*100);
+            setStatus(`<span class="cam-spinner"></span>Reading label… ${pct}%`, "info");
+          }
+        }
+      });
+      tesseractReady = true;
+      return true;
+    } catch(err) {
+      setStatus("OCR engine failed to load: " + err.message, "error");
+      return false;
+    }
+  }
+
+  function startOcrLoop() {
+    stopOcrLoop();
+    setCaptureBtnState("🔄 Scanning label…", true);
+    setStatus("Hold the label steady — scanning automatically…");
+
+    initTesseract().then(ok => {
+      if (!ok) return;
+      setStatus("Hold the label steady — detecting text…");
+      runOcrFrame();
+      ocrLoopInterval = setInterval(() => {
+        if (!ocrCooldown) runOcrFrame();
+      }, 1200);
+    });
+  }
+
+  function stopOcrLoop() {
+    if (ocrLoopInterval) { clearInterval(ocrLoopInterval); ocrLoopInterval = null; }
+    tesseractBusy = false;
+  }
+
+  async function runOcrFrame() {
+    if (tesseractBusy || ocrCooldown || !video.videoWidth || !tesseractReady) return;
+    tesseractBusy = true;
+
+    canvas.width  = video.videoWidth  || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext("2d").drawImage(video, 0, 0);
+    const imgData = canvas.toDataURL("image/jpeg", 0.85);
+
+    try {
+      const { data: { text, words } } = await tesseractWorker.recognize(imgData);
+      const clean = text.trim();
+
+      if (!clean) {
+        setStatus("No text visible — move the label closer or improve lighting.");
+        tesseractBusy = false;
+        return;
+      }
+
+      // ── Phase 1: Show all detected words highlighted ──────────────────
+      const allWords = (words || []).map(w => w.text).filter(Boolean);
+      showRawTextWithWords(clean, allWords);
+      setStatus('<span class="cam-spinner"></span>Scanning for merchant name or tracking code…', "info");
+
+      // ── Phase 2a: Try merchant match ──────────────────────────────────
+      const merchantHit = lookupMerchantInText(clean);
+
+      // ── Phase 2b: Try tracking ID extraction ─────────────────────────
+      const trackingId = extractTrackingIdFromText(clean);
+
+      // ── Decide: first winner fires ────────────────────────────────────
+      if (merchantHit && trackingId) {
+        // Both found — prefer exact merchant match, else prefer tracking ID
+        if (merchantHit.certain || merchantHit.matchScore > 1) {
+          await fireOcrMerchantResult(merchantHit, clean, allWords);
+        } else {
+          await fireOcrTrackingResult(trackingId, clean, allWords);
+        }
+      } else if (merchantHit) {
+        await fireOcrMerchantResult(merchantHit, clean, allWords);
+      } else if (trackingId) {
+        await fireOcrTrackingResult(trackingId, clean, allWords);
+      } else {
+        // No hit — show what we read, keep scanning
+        showMatchResult(null);
+        setStatus(
+          `<span class="cam-spinner"></span>` +
+          `No match yet — ${Object.keys(merchantStats||{}).length} merchants loaded · adjusting…`,
+          "info"
+        );
+      }
+
+    } catch(err) {
+      setStatus("OCR error: " + err.message, "error");
+    }
+
+    tesseractBusy = false;
+  }
+
+  // ── Extract tracking ID from OCR text ──────────────────────────────────
+  function extractTrackingIdFromText(text) {
+    // Only match against known tracking IDs from the loaded mapping
+    if (mapping && Object.keys(mapping).length) {
+      // Normalise OCR text to remove spaces/newlines and try to find exact mapping key
+      const collapsed = text.replace(/\s+/g, "").toUpperCase();
+      const lineByLine = text.split(/[\n\r]+/).map(l => l.trim().replace(/\s/g, "")).filter(Boolean);
+      // Check each line (OCR often puts IDs on their own line)
+      for (const line of lineByLine) {
+        if (mapping[line]) return line;
+        if (mapping[line.toUpperCase()]) return line.toUpperCase();
+      }
+      // Also try full collapsed string
+      for (const id of Object.keys(mapping)) {
+        if (collapsed.includes(id.replace(/\s/g,""))) return id;
+      }
+    }
+    // Fallback: generic patterns
+    const patterns = [
+      /\b([A-Z]{2}\d{8,12}[A-Z]{2})\b/,
+      /\b(JD\d{14,18})\b/,
+      /\b(\d{20,22})\b/,
+      /\b([A-Z]{1,3}\d{8,18})\b/,
+    ];
+    for (const re of patterns) {
+      const m = text.match(re);
+      if (m) return m[1];
+    }
+    return null;
+  }
+
+  // ── Fire result: merchant path ──────────────────────────────────────────
+  async function fireOcrMerchantResult(merchantHit, rawText, allWords) {
+    ocrCooldown = true;
+    stopOcrLoop();
+
+    showMatchResultWithHighlight(merchantHit, rawText, allWords);
+
+    const pct       = Math.round(merchantHit.confidence * 100);
+    const matchType = merchantHit.certain ? "exact" : merchantHit.partial ? "partial" : "keyword";
+    setStatus(
+      `✅ <strong style="color:var(--c-green)">${escHtml(merchantHit.matchedName)}</strong>` +
+      ` <span style="font-size:10px;opacity:.7;">[${matchType}]</span> → ` +
+      `<strong style="color:var(--c-green)">${escHtml(merchantHit.warehouse)}</strong>` +
+      ` <span style="font-size:10px;opacity:.7;">(${pct}% confidence)</span>`,
+      "success"
+    );
+    if (navigator.vibrate) navigator.vibrate([60, 30, 60]);
+
+    // Apply to dashboard — same large hero as tracking scan
+    applyLabelOnlyResult(merchantHit.warehouse, merchantHit.confidence, merchantHit.matchedName);
+
+    setTimeout(() => {
+      clearOcrDisplay();
+      setStatus("Ready for next label — hold steady…");
+      startOcrLoop();
+    }, 600);
+  }
+
+  // ── Fire result: tracking ID path ──────────────────────────────────────
+  async function fireOcrTrackingResult(trackingId, rawText, allWords) {
+    ocrCooldown = true;
+    stopOcrLoop();
+
+    // Highlight the tracking ID in the display
+    showRawTextHighlightToken(rawText, trackingId, allWords);
+    showMatchResultTrackingId(trackingId);
+
+    setStatus(
+      `✅ Tracking ID <strong style="color:var(--c-green)">${escHtml(trackingId)}</strong> found — predicting…`,
+      "success"
+    );
+    if (navigator.vibrate) navigator.vibrate([60]);
+
+    // Run full prediction pipeline — same as manual entry
+    const merchant = getMerchantForId(trackingId);
+    const result   = await hybridPredict(trackingId, merchant !== "Unknown" ? merchant : null);
+    const wh       = result.warehouse || "Unknown";
+    const conf     = result.confidence || 0;
+
+    updateCounters(wh, merchant);
+    recentScans.unshift({ id: trackingId, wh, conf, merchant, resolvedBy: result.resolvedBy || "Label OCR", ts: Date.now() });
+    if (recentScans.length > 50) recentScans.pop();
+
+    if (document.body.classList.contains("mobile")) {
+      showMobOverlay(wh, conf);
+    } else {
+      const aggMatches = merchant !== "Unknown" ? searchMerchantsByName(merchant) : [];
+      const aggWarehouses = aggMatches.length ? aggregateWarehouses(aggMatches) : null;
+      showDesktopResult(wh, conf, result.layerDetails, result.resolvedBy || "Label OCR (tracking ID)",
+        aggWarehouses, merchant !== "Unknown" ? [merchant] : null);
+      renderRecentScans();
+    }
+
+    setTimeout(() => {
+      clearOcrDisplay();
+      setStatus("Ready for next label — hold steady…");
+      startOcrLoop();
+    }, 600);
+  }
+
+  // ── Rich text display helpers ───────────────────────────────────────────
+
+  // Show raw text with each word in a pill
+  function showRawTextWithWords(text, allWords) {
+    const preview = text.replace(/\n+/g, " ").trim().slice(0, 300);
+    rawBlock.innerHTML = escHtml(preview) + (text.length > 300 ? "…" : "");
+    matchBlock.className = "ocr-match-block";
+    matchBlock.innerHTML = "";
+    phaseWrap.classList.add("visible");
+    switchRow.classList.add("visible");
+  }
+
+  // Highlight the matched merchant tokens in the raw text block
+  function showMatchResultWithHighlight(merchantHit, rawText, allWords) {
+    if (!merchantHit) { showMatchResult(null); return; }
+
+    // Build highlighted raw text — mark matched merchant tokens
+    const needle  = merchantHit.matchedName.toLowerCase();
+    const preview = rawText.replace(/\n+/g, " ").trim().slice(0, 300);
+    const escaped = escHtml(preview);
+    const needleEsc = merchantHit.matchedName.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    const highlighted = escaped.replace(
+      new RegExp(needleEsc, "gi"),
+      m => `<mark style="background:var(--c-green-d);color:var(--c-green);border-radius:3px;padding:1px 3px;font-weight:700;">${m}</mark>`
+    );
+    rawBlock.innerHTML = highlighted + (rawText.length > 300 ? "…" : "");
+
+    // Match block
+    const pct   = Math.round(merchantHit.confidence * 100);
+    const label = merchantHit.certain ? "exact match"
+      : merchantHit.partial ? `partial · ${pct}% of orders` : `${pct}% of orders`;
+    matchBlock.className = "ocr-match-block hit";
+    matchBlock.innerHTML =
+      `✅ <strong>${escHtml(merchantHit.matchedName)}</strong> → ` +
+      `<strong>${escHtml(merchantHit.warehouse)}</strong>` +
+      ` <span style="opacity:.7;font-size:10px;">(${label})</span>`;
+
+    phaseWrap.classList.add("visible");
+    switchRow.classList.add("visible");
+  }
+
+  // Highlight a tracking ID token in the raw text block
+  function showRawTextHighlightToken(rawText, token, allWords) {
+    const preview  = rawText.replace(/\n+/g, " ").trim().slice(0, 300);
+    const tokenEsc = token.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+    rawBlock.innerHTML = escHtml(preview).replace(
+      new RegExp(tokenEsc, "gi"),
+      m => `<mark style="background:rgba(99,102,241,.18);color:var(--accent);border-radius:3px;padding:1px 3px;font-weight:700;">${m}</mark>`
+    ) + (rawText.length > 300 ? "…" : "");
+    phaseWrap.classList.add("visible");
+    switchRow.classList.add("visible");
+  }
+
+  function showMatchResultTrackingId(trackingId) {
+    matchBlock.className = "ocr-match-block hit";
+    matchBlock.innerHTML =
+      `🔢 Tracking ID: <strong style="font-family:'JetBrains Mono',monospace;">${escHtml(trackingId)}</strong> — running prediction…`;
+  }
+
+  // ── Apply label result to dashboard (camera stays open) ──
+  function applyLabelOnlyResult(warehouse, confidence, merchantName) {
+    const merchant = merchantName || "Label Scan";
+    updateCounters(warehouse, merchant);
+    const id = "LABEL-" + Date.now().toString(36).toUpperCase();
+    recentScans.unshift({ id, wh: warehouse, conf: confidence, merchant, resolvedBy: "Label OCR", ts: Date.now() });
+    if (recentScans.length > 50) recentScans.pop();
+    // Build aggregate warehouse view from merchant stats
+    const aggMatches = merchantName ? searchMerchantsByName(merchantName) : [];
+    const aggWarehouses = aggMatches.length ? aggregateWarehouses(aggMatches) : null;
+    if (document.body.classList.contains("mobile")) {
+      showMobOverlay(warehouse, confidence);
+    } else {
+      showDesktopResult(warehouse, confidence, null, `Label OCR — merchant "${merchant}"`,
+        aggWarehouses, merchantName ? [merchantName] : null);
+      renderRecentScans();
+    }
+  }
+
+  // ── Utility ────────────────────────────────────
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+
+  // ── Enable camera button when model/CSV is loaded ──
+  const inputObs = new MutationObserver(() => {
+    document.getElementById("cameraBtn").disabled =
+      document.getElementById("returnIdInput").disabled;
+  });
+  inputObs.observe(document.getElementById("returnIdInput"),
+    { attributes: true, attributeFilter: ["disabled"] });
+
+})();
+</script>
+</body>
+</html>
